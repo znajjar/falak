@@ -1,0 +1,67 @@
+{
+  "name": "Falak",
+  "version": "1.0.0",
+  "targetDevice": {
+    "model": "Google Pixel 10 Pro",
+    "displayType": "6.3-inch Super Actua LTPO OLED",
+    "widthPx": 1280,
+    "heightPx": 2856,
+    "aspectRatio": "20:9",
+    "exactRatio": 0.448179,
+    "ppi": 495,
+    "refreshRateHz": [1, 120]
+  },
+  "location": {
+    "city": "Amman",
+    "country": "Jordan",
+    "latitudeDeg": 31.9539,
+    "longitudeDeg": 35.9106,
+    "timezone": "Asia/Amman",
+    "utcOffsetHours": 3.0,
+    "method": "Jordan Ministry of Awqaf",
+    "fajrAngleDeg": 18.0,
+    "ishaAngleDeg": 18.0,
+    "asrShadowFactor": 1.0
+  },
+  "camera": {
+    "position": [0.0, -13.0, 31.5],
+    "pitchDeg": 53.03,
+    "yawDeg": 0.0,
+    "fovYDeg": 58.0
+  },
+  "star": {
+    "position": [0.0, 0.0, 0.0],
+    "screenYNormFromTop": 1.0336,
+    "visibleFraction": 0.35,
+    "coreRadiusNorm": 0.25,
+    "coreDiameterNorm": 0.50,
+    "glowIntensity": 1.0
+  },
+  "orbits": {
+    "count": 5,
+    "lineWidthPxAt1024": 0.92,
+    "brightness": 1.0
+  },
+  "prayers": [
+    { "id": "fajr",    "name": "Fajr",    "orbitRadius": 13.5, "planetRadius": 0.50 },
+    { "id": "dhuhr",   "name": "Dhuhr",   "orbitRadius": 16.8, "planetRadius": 0.58 },
+    { "id": "asr",     "name": "Asr",     "orbitRadius": 20.1, "planetRadius": 0.54 },
+    { "id": "maghrib", "name": "Maghrib", "orbitRadius": 23.4, "planetRadius": 0.60 },
+    { "id": "isha",    "name": "Isha",    "orbitRadius": 26.7, "planetRadius": 0.55 }
+  ],
+  "palette": {
+    "bgZenith": [0.042, 0.044, 0.050],
+    "bgHorizon": [0.068, 0.070, 0.078],
+    "planetNight": [0.072, 0.075, 0.084],
+    "starTint": [1.0, 0.968, 0.915]
+  },
+  "planetShading": {
+    "diffuseStrength": 0.96,
+    "terminatorWrap": 0.72,
+    "rimStrength": 0.14
+  },
+  "atmosphere": {
+    "grainStrength": 0.65,
+    "starfieldStrength": 1.0
+  }
+}

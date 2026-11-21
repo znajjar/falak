@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Falak — Celestial Prayer-Time Wallpaper (Pixel 10 Pro)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .phone-frame {
+      width: min(306px, 84vw);
+      aspect-ratio: 1280 / 2856;
+    }
+    input[type="range"] {
+      height: 4px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased m-0 p-0">
+  <div class="p-4 md:p-5 max-w-5xl mx-auto flex flex-col gap-3.5">
+
+    <!-- Header -->
+    <header class="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-[var(--border)]">
+      <div>
+        <h1 class="text-base font-semibold tracking-tight text-[var(--foreground)]">
+          Falak — Amman Prayer Times
+        </h1>
+        <p class="text-xs text-[var(--muted-foreground)] mt-0.5">
+          Pixel 10 Pro · 1280 × 2856 (20:9) · Amman (31.95°N, 35.91°E · UTC+3 · Awqaf 18°/18°)
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="inline-flex rounded-lg border border-[var(--border)] bg-[var(--card)] p-0.5 text-xs" role="group">
+          <button id="mode-live" class="px-2.5 py-1 rounded-md font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">Live Amman</button>
+          <button id="mode-timelapse" class="px-2.5 py-1 rounded-md font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">24h Timelapse</button>
+        </div>
+        <button id="toggle-labels" class="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs font-medium text-[var(--foreground)] hover:opacity-90">
+          Orbit Labels: On
+        </button>
+        <button id="toggle-ui" class="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs font-medium text-[var(--foreground)] hover:opacity-90">
+          Pixel UI: Off
+        </button>
+      </div>
+    </header>
+
+    <!-- Main workspace -->
+    <main class="grid grid-cols-1 md:grid-cols-[minmax(280px,1fr)_356px] gap-4 items-start">
+
+      <!-- Left: Pixel 10 Pro Live Viewport -->
+      <section class="flex flex-col items-center justify-center gap-2.5">
+        <div class="relative rounded-[2.15rem] p-[7px] bg-[var(--card)] border border-[var(--border)] shadow-lg">
+          <div class="phone-frame relative overflow-hidden rounded-[1.8rem] bg-[#0c0d10] select-none">
+            <canvas id="gl-canvas" class="w-full h-full block"></canvas>
+
+            <!-- Subtle orbit legend overlay -->
+            <div id="orbit-labels" class="pointer-events-none absolute inset-0 text-white/55 font-mono text-xs">
+              <span class="absolute left-3" style="top: 21.7%;">Isha</span>
+              <span class="absolute left-3" style="top: 40.7%;">Maghrib</span>
+              <span class="absolute left-3" style="top: 55.4%;">Asr</span>
+              <span class="absolute left-3" style="top: 67.0%;">Dhuhr</span>
+              <span class="absolute left-3" style="top: 76.5%;">Fajr</span>
+            </div>
+
+            <!-- Optional Pixel 10 Pro Lockscreen Overlay -->
+            <div id="pixel-overlay" class="hidden pointer-events-none absolute inset-0 flex flex-col justify-between p-4 text-white/75">
+              <div class="flex flex-col items-center">
+                <div class="w-full flex items-center justify-between px-2 pt-0.5 text-xs font-medium tracking-tight opacity-80">
+                  <span id="ui-status-time">17:34</span>
+                  <div class="w-3.5 h-3.5 rounded-full bg-black/90 ring-1 ring-white/15"></div>
+                  <span>5G · 94%</span>
+                </div>
+                <div class="mt-4 text-center">
+                  <div id="ui-date" class="text-xs uppercase tracking-widest opacity-70">Sat, Nov 21</div>
+                  <div id="ui-clock" class="text-4xl font-light tracking-tight leading-none mt-1 opacity-85 tabular-nums">17:34</div>
+                </div>
+              </div>
+              <div class="flex flex-col items-center pb-0.5">
+                <div class="w-24 h-1 rounded-full bg-white/40"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 text-xs text-[var(--muted-foreground)] font-mono tabular-nums">
+          <span id="footer-time">Amman 17:34 (UTC+3)</span>
+          <span>·</span>
+          <span id="footer-next">Next: Isha in 1h 25m</span>
+        </div>
+      </section>
+
+      <!-- Right: Amman Prayer Controls & Scene Tuning -->
+      <aside class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 flex flex-col gap-3">
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Amman Local Time</h2>
+            <input id="date-input" type="date" class="text-xs font-mono bg-[var(--background)] text-[var(--foreground)] border border-[var(--border)] rounded-md px-2 py-0.5" />
+          </div>
+
+          <div class="flex items-baseline justify-between">
+            <span id="time-readout" class="text-2xl font-mono font-semibold tabular-nums tracking-tight">17:34</span>
+            <span id="countdown-readout" class="text-xs font-mono text-[var(--muted-foreground)] tabular-nums">Maghrib aligned</span>
+          </div>
+
+          <input id="time-slider" type="range" min="0" max="1439" step="1" value="1054" class="w-full accent-[var(--primary)]" />
+          <div class="flex justify-between text-xs font-mono text-[var(--muted-foreground)] tabular-nums">
+            <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:59</span>
+          </div>
+        </div>
+
+        <hr class="border-[var(--border)]" />
+
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Five Prayer Orbits</h2>
+            <span class="text-xs text-[var(--muted-foreground)]">Tap to align</span>
+          </div>
+          <div id="prayer-list" class="flex flex-col gap-1.5"></div>
+        </div>
+
+        <hr class="border-[var(--border)]" />
+
+        <div class="space-y-2">
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Scene Tuning</h2>
+          <label class="block text-xs">
+            <div class="flex justify-between mb-0.5">
+              <span class="text-[var(--muted-foreground)]">Timelapse Speed</span>
+              <span id="val-speed" class="font-mono tabular-nums">1.2 h/s</span>
+            </div>
+            <input id="sl-speed" type="range" min="0.2" max="4.0" step="0.1" value="1.2" class="w-full accent-[var(--primary)]" />
+          </label>
+          <label class="block text-xs">
+            <div class="flex justify-between mb-0.5">
+              <span class="text-[var(--muted-foreground)]">Starfield Dust</span>
+              <span id="val-stars" class="font-mono tabular-nums">1.00×</span>
+            </div>
+            <input id="sl-stars" type="range" min="0.00" max="1.60" step="0.05" value="1.00" class="w-full accent-[var(--primary)]" />
+          </label>
+          <label class="block text-xs">
+            <div class="flex justify-between mb-0.5">
+              <span class="text-[var(--muted-foreground)]">Orbit Brightness</span>
+              <span id="val-rbright" class="font-mono tabular-nums">1.00×</span>
+            </div>
+            <input id="sl-rbright" type="range" min="0.40" max="1.80" step="0.05" value="1.00" class="w-full accent-[var(--primary)]" />
+          </label>
+        </div>
+
+        <button id="btn-export" class="w-full py-2 px-3 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-medium hover:opacity-90 transition-opacity">
+          Export Pixel 10 Pro PNG (1280 × 2856)
+        </button>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const VERT_SRC = `#version 300 es
+precision highp float;
+out vec2 vUv;
+void main() {
+    vec2 pos = vec2(
+        float((gl_VertexID & 1) << 2) - 1.0,
+        float((gl_VertexID & 2) << 1) - 1.0
+    );
+    vUv = pos * 0.5 + 0.5;
+    gl_Position = vec4(pos, 0.0, 1.0);
+}`;
+
+    const FRAG_SRC = `#version 300 es
+precision highp float;
+
+in vec2 vUv;
+out vec4 fragColor;
+
+uniform vec2 uResolution;
+uniform float uTime;
+
+uniform vec3 uCamPos;
+uniform float uCamPitch;
+uniform float uCamYaw;
+uniform float uFovY;
+
+uniform float uRingWidth;
+uniform float uRingBrightness;
+
+uniform float uPlanetOrbitR[5];
+uniform float uPlanetAngles[5];
+uniform float uPlanetRadii[5];
+
+uniform float uPlanetDiffuse;
+uniform float uTerminatorWrap;
+uniform float uRimStrength;
+
+uniform float uSunCoreR;
+uniform float uSunGlow;
+
+uniform float uGrainStrength;
+uniform float uStarfieldStrength;
+
+const float PI = 3.14159265359;
+
+const vec3 BG_ZENITH    = vec3(0.042, 0.044, 0.050);
+const vec3 BG_HORIZON   = vec3(0.068, 0.070, 0.078);
+const vec3 PLANET_NIGHT = vec3(0.072, 0.075, 0.084);
+const vec3 STAR_TINT    = vec3(1.000, 0.968, 0.915);
+const vec3 CORONA_TINT  = vec3(0.965, 0.935, 0.890);
+const vec3 ORBIT_TINT   = vec3(0.840, 0.865, 0.910);
+const vec3 ACTIVE_TINT  = vec3(1.000, 0.960, 0.900);
+
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+vec2 hash22(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+float hash13(vec3 p3) {
+    p3 = fract(p3 * 0.1031);
+    p3 += dot(p3, p3.zyx + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float noise3D(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float n000 = hash13(i + vec3(0.0, 0.0, 0.0));
+    float n100 = hash13(i + vec3(1.0, 0.0, 0.0));
+    float n010 = hash13(i + vec3(0.0, 1.0, 0.0));
+    float n110 = hash13(i + vec3(1.0, 1.0, 0.0));
+    float n001 = hash13(i + vec3(0.0, 0.0, 1.0));
+    float n101 = hash13(i + vec3(1.0, 0.0, 1.0));
+    float n011 = hash13(i + vec3(0.0, 1.0, 1.0));
+    float n111 = hash13(i + vec3(1.0, 1.0, 1.0));
+
+    float nx00 = mix(n000, n100, f.x);
+    float nx10 = mix(n010, n110, f.x);
+    float nx01 = mix(n001, n101, f.x);
+    float nx11 = mix(n011, n111, f.x);
+
+    float nxy0 = mix(nx00, nx10, f.y);
+    float nxy1 = mix(nx01, nx11, f.y);
+    return mix(nxy0, nxy1, f.z);
+}
+
+float planetSurfaceFbm(vec3 p) {
+    float v = 0.0;
+    float amp = 0.55;
+    for (int i = 0; i < 3; i++) {
+        v += amp * noise3D(p);
+        p = p * 2.15 + vec3(13.7, 7.3, 5.1);
+        amp *= 0.48;
+    }
+    return v;
+}
+
+float filmGrain(vec2 fragCoord) {
+    float n1 = hash12(fragCoord);
+    float n2 = hash12(fragCoord + vec2(17.13, 31.71));
+    return (n1 + n2) - 1.0;
+}
+
+vec3 evalStarfield(vec2 uv, float resScale) {
+    if (uStarfieldStrength <= 0.001) return vec3(0.0);
+    float skyMask = smoothstep(0.18, 0.52, uv.y);
+    if (skyMask <= 0.001) return vec3(0.0);
+
+    vec2 aspectUv = vec2(uv.x * (uResolution.x / uResolution.y), uv.y);
+    vec3 stars = vec3(0.0);
+
+    {
+        vec2 grid = aspectUv * 26.0;
+        vec2 cell = floor(grid);
+        vec2 f = fract(grid);
+        vec2 rnd = hash22(cell + vec2(11.3, 29.1));
+        if (rnd.x > 0.89) {
+            vec2 center = vec2(0.18) + 0.64 * hash22(cell + vec2(47.2, 13.7));
+            float d = length(f - center);
+            float core = exp(-pow(max(d / 0.048, 1e-5), 2.0));
+            float brightness = mix(0.10, 0.28, rnd.y);
+            vec3 tint = mix(vec3(0.84, 0.89, 1.0), vec3(1.0, 0.95, 0.88), hash12(cell));
+            stars += tint * core * brightness;
+        }
+    }
+    {
+        vec2 grid = aspectUv * 54.0;
+        vec2 cell = floor(grid);
+        vec2 f = fract(grid);
+        vec2 rnd = hash22(cell + vec2(71.9, 5.4));
+        if (rnd.x > 0.91) {
+            vec2 center = vec2(0.15) + 0.70 * hash22(cell + vec2(3.1, 88.6));
+            float d = length(f - center);
+            float core = exp(-pow(max(d / 0.055, 1e-5), 2.0));
+            stars += vec3(0.82, 0.85, 0.92) * core * mix(0.05, 0.14, rnd.y);
+        }
+    }
+    return stars * skyMask * uStarfieldStrength;
+}
+
+void buildCameraBasis(float yaw, float pitch, out vec3 right, out vec3 up, out vec3 fwd) {
+    float cy = cos(yaw);
+    float sy = sin(yaw);
+    float cp = cos(pitch);
+    float sp = sin(pitch);
+    fwd   = vec3(-sy * cp, sp, -cy * cp);
+    right = vec3(cy, 0.0, -sy);
+    up    = cross(right, fwd);
+}
+
+vec3 getRayDir(vec2 ndc, float focal, vec3 right, vec3 up, vec3 fwd) {
+    return normalize(ndc.x * right + ndc.y * up + focal * fwd);
+}
+
+float intersectOrbitalPlane(vec3 ro, vec3 rd) {
+    if (abs(rd.y) < 1e-6) return -1.0;
+    return -ro.y / rd.y;
+}
+
+float wrapAngleDiff(float a, float b) {
+    float d = a - b;
+    return mod(d + PI, 2.0 * PI) - PI;
+}
+
+vec4 evalOrbitalPlane(vec3 ro, vec3 rd, vec3 rdDx, vec3 rdDy, float resScale) {
+    float t = intersectOrbitalPlane(ro, rd);
+    if (t <= 0.0) return vec4(0.0, 0.0, 0.0, 1e9);
+
+    vec3 hit = ro + t * rd;
+    if (hit.z <= 0.0) return vec4(0.0, 0.0, 0.0, t);
+
+    float r = length(hit.xz);
+    float hitAngle = atan(hit.x, hit.z);
+
+    float tx = intersectOrbitalPlane(ro, rdDx);
+    float ty = intersectOrbitalPlane(ro, rdDy);
+    vec3 hitX = (tx > 0.0) ? (ro + tx * rdDx) : hit;
+    vec3 hitY = (ty > 0.0) ? (ro + ty * rdDy) : hit;
+
+    float drPerPx = max(length(vec2(abs(length(hitX.xz) - r), abs(length(hitY.xz) - r))), 1e-5);
+    float dxPerPx = max(length(vec2(abs(hitX.x - hit.x), abs(hitY.x - hit.x))), 1e-5);
+
+    float halfWidthPx = max(0.40, uRingWidth * resScale * 0.48);
+    float screenX = abs(vUv.x * 2.0 - 1.0);
+    float edgeAtten = 1.0 - 0.36 * smoothstep(0.14, 1.04, screenX);
+
+    vec3 accum = vec3(0.0);
+
+    float rMin = uPlanetOrbitR[0] - 0.8;
+    float rMax = uPlanetOrbitR[4] + 0.8;
+    if (r >= rMin && r <= rMax) {
+        float pxMeridian = abs(hit.x) / dxPerPx;
+        float mLine = 1.0 - smoothstep(0.35 * resScale, 1.15 * resScale, pxMeridian);
+        float dash = smoothstep(0.30, 0.65, sin(r * 11.0) * 0.5 + 0.5);
+        float mFade = smoothstep(rMin, rMin + 1.2, r) * (1.0 - smoothstep(rMax - 1.2, rMax, r));
+        accum += ORBIT_TINT * (mLine * dash * mFade * 0.055 * uRingBrightness);
+    }
+
+    for (int i = 0; i < 5; i++) {
+        float targetR = uPlanetOrbitR[i];
+        float distR = abs(r - targetR);
+        float pxDist = distR / drPerPx;
+
+        float a = abs(uPlanetAngles[i]);
+        float alignBoost = exp(-pow(max(a / 0.055, 1e-5), 2.0));
+
+        if (pxDist <= halfWidthPx + 1.5) {
+            float aa = 1.0 - smoothstep(halfWidthPx * 0.25, halfWidthPx + 0.90, pxDist);
+            if (aa > 0.001) {
+                float outerT = float(i) * 0.25;
+                float depthWeight = mix(0.76, 1.0, outerT);
+
+                float angDelta = wrapAngleDiff(hitAngle, uPlanetAngles[i]);
+                float trailWidth = (angDelta < 0.0) ? 0.14 : 0.075;
+                float planetWake = exp(-pow(max(abs(angDelta) / trailWidth, 1e-5), 1.8)) * 0.15;
+
+                float baseInt = 0.22 * depthWeight * edgeAtten;
+                float activeLift = alignBoost * 0.16 * edgeAtten;
+
+                vec3 ringCol = mix(ORBIT_TINT, ACTIVE_TINT, clamp(alignBoost * 0.75 + planetWake * 2.5, 0.0, 1.0));
+                accum += ringCol * aa * (baseInt + activeLift + planetWake * edgeAtten) * uRingBrightness;
+            }
+        }
+
+        float pxFromPip = length(vec2(abs(hit.x) / dxPerPx, distR / drPerPx));
+        float pipRadPx = (2.1 + 0.8 * alignBoost) * resScale;
+        if (pxFromPip < pipRadPx + 1.5) {
+            float pipMask = 1.0 - smoothstep(pipRadPx * 0.45, pipRadPx + 0.85, pxFromPip);
+            vec3 pipCol = mix(ORBIT_TINT, ACTIVE_TINT, alignBoost);
+            accum += pipCol * pipMask * (0.16 + 0.26 * alignBoost) * uRingBrightness;
+        }
+    }
+
+    return vec4(accum, t);
+}
+
+vec4 evalPlanet(vec3 ro, vec3 rd, vec3 planetPos, float planetR, vec3 sunPos, float focal, float alignBoost, float planetSeed, out float tHit) {
+    vec3 oc = ro - planetPos;
+    float b = dot(oc, rd);
+    float c = dot(oc, oc) - planetR * planetR;
+    float disc = b * b - c;
+
+    float tClosest = -b;
+    if (tClosest <= 0.0) {
+        tHit = 1e9;
+        return vec4(0.0);
+    }
+
+    vec3 closestPt = oc + tClosest * rd;
+    float distToCenter = length(closestPt);
+    float pxWorld = tClosest / (focal * uResolution.y);
+
+    float alpha = 1.0 - smoothstep(planetR - 0.75 * pxWorld, planetR + 0.75 * pxWorld, distToCenter);
+    if (alpha <= 0.001) {
+        tHit = 1e9;
+        return vec4(0.0);
+    }
+
+    vec3 hitPos;
+    vec3 N;
+    if (disc > 0.0) {
+        tHit = -b - sqrt(disc);
+        hitPos = ro + tHit * rd;
+        N = normalize(hitPos - planetPos);
+    } else {
+        tHit = tClosest;
+        N = normalize(closestPt);
+        hitPos = planetPos + N * planetR;
+    }
+
+    vec3 L = normalize(sunPos - hitPos);
+    vec3 V = -rd;
+
+    float ndotl = dot(N, L);
+    float ndotv = clamp(dot(N, V), 0.0, 1.0);
+
+    float surfaceTex = planetSurfaceFbm(N * 3.4 + vec3(planetSeed * 5.7, planetSeed * 3.1, 1.9));
+    float albedoMod = mix(0.86, 1.12, surfaceTex);
+
+    float wrap = max(uTerminatorWrap, 0.01);
+    float wrapped = clamp((ndotl + wrap) / (1.0 + wrap), 0.0, 1.0);
+    float rawDiffuse = (wrapped > 0.0) ? pow(wrapped, 1.72) * uPlanetDiffuse * albedoMod : 0.0;
+
+    float fresnel = pow(max(1.0 - ndotv, 1e-5), 2.8);
+    float sunHemisphere = smoothstep(-0.30, 0.30, ndotl);
+    float rim = fresnel * sunHemisphere * (uRimStrength + 0.14 * alignBoost);
+
+    float litPeak = 0.54 + 0.16 * alignBoost;
+    float shapedLit = litPeak * (1.0 - exp(-(rawDiffuse + rim) * 1.65));
+
+    vec3 litTint = mix(vec3(0.90, 0.90, 0.92), STAR_TINT, clamp(wrapped * 0.75 + rim * 1.4, 0.0, 1.0));
+    vec3 rgb = PLANET_NIGHT * mix(0.92, 1.08, surfaceTex) + litTint * shapedLit;
+
+    float nightLimb = pow(max(1.0 - ndotv, 1e-5), 3.4) * (1.0 - sunHemisphere) * 0.045;
+    rgb += vec3(0.75, 0.80, 0.90) * nightLimb;
+
+    return vec4(rgb, alpha);
+}
+
+vec3 evalSun(vec3 ro, vec3 sunPos, vec2 ndc, float focal, vec3 camRight, vec3 camUp, vec3 camFwd, float nearestPlanetAlpha, float nearestPlanetT) {
+    vec3 toSun = sunPos - ro;
+    float zSun = dot(toSun, camFwd);
+    if (zSun <= 0.0) return vec3(0.0);
+
+    vec2 sunNdc = vec2(dot(toSun, camRight), dot(toSun, camUp)) * (focal / zSun);
+    float aspect = uResolution.x / uResolution.y;
+    float rNorm = length(ndc - sunNdc) / aspect;
+
+    float rCore = max(uSunCoreR, 0.02);
+    float coreBody = 1.0 - smoothstep(rCore * 0.92, rCore * 1.04, rNorm);
+
+    float limbGrad = smoothstep(rCore * 0.55, rCore * 0.98, rNorm);
+    vec3 coreCol = mix(vec3(1.0, 0.995, 0.985), STAR_TINT, limbGrad);
+
+    float dEdge = max(rNorm - rCore, 0.0);
+    float innerCorona = 0.56 * exp(-pow(max(dEdge / (rCore * 0.36), 1e-5), 1.25));
+    float outerBloom  = 0.22 * exp(-pow(max(dEdge / (rCore * 1.08), 1e-5), 1.85));
+
+    float eclipseMask = (nearestPlanetT < zSun) ? (1.0 - nearestPlanetAlpha) : 1.0;
+    vec3 glowCol = (STAR_TINT * innerCorona + CORONA_TINT * outerBloom) * uSunGlow * mix(1.0, 0.35, 1.0 - eclipseMask);
+    return max(coreCol * coreBody * 1.05 * eclipseMask, glowCol);
+}
+
+void main() {
+    float resScale = uResolution.y / 1024.0;
+    float focal = 0.5 / tan(0.5 * uFovY);
+
+    vec3 camRight, camUp, camFwd;
+    buildCameraBasis(uCamYaw, uCamPitch, camRight, camUp, camFwd);
+
+    vec2 ndc = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;
+    vec2 pxStep = vec2(1.0 / uResolution.y);
+
+    vec3 rd   = getRayDir(ndc, focal, camRight, camUp, camFwd);
+    vec3 rdDx = getRayDir(ndc + vec2(pxStep.x, 0.0), focal, camRight, camUp, camFwd);
+    vec3 rdDy = getRayDir(ndc + vec2(0.0, pxStep.y), focal, camRight, camUp, camFwd);
+
+    vec3 sunPos = vec3(0.0);
+    vec3 col = mix(BG_HORIZON, BG_ZENITH, smoothstep(0.10, 0.85, vUv.y));
+    col += evalStarfield(vUv, resScale);
+
+    vec4 orbitEval = evalOrbitalPlane(uCamPos, rd, rdDx, rdDy, resScale);
+    vec3 orbitRgb = orbitEval.rgb;
+    float tRing = orbitEval.a;
+
+    float nearestT = 1e9;
+    vec4 nearestPlanet = vec4(0.0);
+
+    for (int i = 0; i < 5; i++) {
+        float orbitR = uPlanetOrbitR[i];
+        float ang = uPlanetAngles[i];
+        vec3 pPos = vec3(orbitR * sin(ang), 0.0, orbitR * cos(ang));
+        if (pPos.z <= 0.0) continue;
+
+        float alignBoost = exp(-pow(max(abs(ang) / 0.055, 1e-5), 2.0));
+        float tHit = 1e9;
+        vec4 pCol = evalPlanet(uCamPos, rd, pPos, uPlanetRadii[i], sunPos, focal, alignBoost, float(i) + 1.0, tHit);
+        if (pCol.a > 0.001 && tHit < nearestT) {
+            nearestT = tHit;
+            nearestPlanet = pCol;
+        }
+    }
+
+    if (nearestPlanet.a > 0.001 && nearestT < tRing) {
+        col += orbitRgb;
+        col = mix(col, nearestPlanet.rgb, nearestPlanet.a);
+    } else {
+        if (nearestPlanet.a > 0.001) {
+            col = mix(col, nearestPlanet.rgb, nearestPlanet.a);
+        }
+        col += orbitRgb;
+    }
+
+    vec3 sunAdd = evalSun(uCamPos, sunPos, ndc, focal, camRight, camUp, camFwd, nearestPlanet.a, nearestT);
+    col = clamp(col + sunAdd, 0.0, 1.0);
+
+    vec2 grainCoord = floor(gl_FragCoord.xy / max(1.0, resScale * 0.65));
+    float grain = filmGrain(grainCoord) * 0.0105 * uGrainStrength;
+    col = clamp(col + vec3(grain), 0.0, 1.0);
+
+    fragColor = vec4(col, 1.0);
+}`;
+
+    const AMMAN = { lat: 31.9539, lon: 35.9106, tz: 3.0, fajrDeg: 18.0, ishaDeg: 18.0, asrShadow: 1.0 };
+    const PRAYERS = [
+      { id: 'fajr',    name: 'Fajr',    orbitR: 13.5, radius: 0.50 },
+      { id: 'dhuhr',   name: 'Dhuhr',   orbitR: 16.8, radius: 0.58 },
+      { id: 'asr',     name: 'Asr',     orbitR: 20.1, radius: 0.54 },
+      { id: 'maghrib', name: 'Maghrib', orbitR: 23.4, radius: 0.60 },
+      { id: 'isha',    name: 'Isha',    orbitR: 26.7, radius: 0.55 },
+    ];
+
+    function julianDay(y, m, d) {
+      if (m <= 2) { y -= 1; m += 12; }
+      const A = Math.floor(y / 100);
+      const B = 2 - A + Math.floor(A / 4);
+      return Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + d + B - 1524.5;
+    }
+
+    function sunPosition(jd) {
+      const D = jd - 2451545.0;
+      const deg = Math.PI / 180.0;
+      const g = (((357.529 + 0.98560028 * D) % 360) + 360) % 360 * deg;
+      const q = (((280.459 + 0.98564736 * D) % 360) + 360) % 360;
+      const L = (((q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) % 360) + 360) % 360 * deg;
+      const e = (23.439 - 0.00000036 * D) * deg;
+      let ra = (Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)) * 180 / Math.PI) / 15.0;
+      ra = ((ra % 24) + 24) % 24;
+      const decl = Math.asin(Math.sin(e) * Math.sin(L));
+      let eqt = q / 15.0 - ra;
+      if (eqt > 12) eqt -= 24;
+      if (eqt < -12) eqt += 24;
+      return { decl, eqt };
+    }
+
+    function hourAngleForAlt(latRad, decl, altDeg) {
+      const altRad = altDeg * Math.PI / 180.0;
+      const cosHa = Math.max(-1, Math.min(1,
+        (Math.sin(altRad) - Math.sin(latRad) * Math.sin(decl)) / (Math.cos(latRad) * Math.cos(decl))
+      ));
+      return (Math.acos(cosHa) * 180 / Math.PI) / 15.0;
+    }
+
+    function computeAmmanDay(y, m, d) {
+      const jd0 = julianDay(y, m, d) - AMMAN.lon / 360.0;
+      const latR = AMMAN.lat * Math.PI / 180.0;
+      const evalAt = (approxH, fn) => {
+        const { decl, eqt } = sunPosition(jd0 + approxH / 24.0);
+        const noon = 12.0 + AMMAN.tz - AMMAN.lon / 15.0 - eqt;
+        return fn(noon, decl);
+      };
+      const fajr = evalAt(5.0, (n, decl) => n - hourAngleForAlt(latR, decl, -AMMAN.fajrDeg));
+      const dhuhr = evalAt(12.3, (n) => n);
+      const asr = evalAt(15.3, (n, decl) => {
+        const alt = Math.atan(1.0 / (AMMAN.asrShadow + Math.tan(Math.abs(latR - decl)))) * 180 / Math.PI;
+        return n + hourAngleForAlt(latR, decl, alt);
+      });
+      const maghrib = evalAt(17.5, (n, decl) => n + hourAngleForAlt(latR, decl, -0.8333));
+      const isha = evalAt(19.0, (n, decl) => n + hourAngleForAlt(latR, decl, -AMMAN.ishaDeg));
+      return [fajr, dhuhr, asr, maghrib, isha];
+    }
+
+    function shiftDate(y, m, d, deltaDays) {
+      const dt = new Date(Date.UTC(y, m - 1, d + deltaDays));
+      return [dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate()];
+    }
+
+    function computeOrbitalState(y, m, d, hourOfDay) {
+      const [py, pm, pd] = shiftDate(y, m, d, -1);
+      const [ny, nm, nd] = shiftDate(y, m, d, +1);
+      const prev = computeAmmanDay(py, pm, pd).map(h => h - 24.0);
+      const today = computeAmmanDay(y, m, d);
+      const next = computeAmmanDay(ny, nm, nd).map(h => h + 24.0);
+
+      const angles = [];
+      for (let i = 0; i < 5; i++) {
+        const t0 = hourOfDay < today[i] ? prev[i] : today[i];
+        const t1 = hourOfDay < today[i] ? today[i] : next[i];
+        let phase = (hourOfDay - t0) / (t1 - t0);
+        phase = ((phase % 1) + 1) % 1;
+        if (phase >= 0.5) phase -= 1.0;
+        angles.push(phase * 2.0 * Math.PI);
+      }
+
+      let nextIdx = today.findIndex(h => h >= hourOfDay);
+      let minToNext;
+      if (nextIdx === -1) {
+        nextIdx = 0;
+        minToNext = Math.round((next[0] - hourOfDay) * 60);
+      } else {
+        minToNext = Math.round((today[nextIdx] - hourOfDay) * 60);
+      }
+      return { angles, today, nextIdx, minToNext };
+    }
+
+    function fmtTime(hours) {
+      const total = Math.round(hours * 60);
+      const h = ((Math.floor(total / 60) % 24) + 24) % 24;
+      const m = ((total % 60) + 60) % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    function nowInAmman() {
+      const a = new Date(Date.now() + AMMAN.tz * 3600_000);
+      return {
+        y: a.getUTCFullYear(),
+        m: a.getUTCMonth() + 1,
+        d: a.getUTCDate(),
+        hour: a.getUTCHours() + a.getUTCMinutes() / 60 + a.getUTCSeconds() / 3600,
+      };
+    }
+
+    const canvas = document.getElementById('gl-canvas');
+    const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+    if (!gl) throw new Error('WebGL2 unavailable');
+
+    function compile(ctx, type, src) {
+      const s = ctx.createShader(type);
+      ctx.shaderSource(s, src);
+      ctx.compileShader(s);
+      if (!ctx.getShaderParameter(s, ctx.COMPILE_STATUS)) throw new Error(ctx.getShaderInfoLog(s));
+      return s;
+    }
+
+    function buildProg(ctx) {
+      const p = ctx.createProgram();
+      ctx.attachShader(p, compile(ctx, ctx.VERTEX_SHADER, VERT_SRC));
+      ctx.attachShader(p, compile(ctx, ctx.FRAGMENT_SHADER, FRAG_SRC));
+      ctx.linkProgram(p);
+      if (!ctx.getProgramParameter(p, ctx.LINK_STATUS)) throw new Error(ctx.getProgramInfoLog(p));
+      return p;
+    }
+
+    const prog = buildProg(gl);
+    const uniformNames = [
+      'uResolution', 'uTime', 'uCamPos', 'uCamPitch', 'uCamYaw', 'uFovY',
+      'uRingWidth', 'uRingBrightness', 'uPlanetOrbitR', 'uPlanetAngles', 'uPlanetRadii',
+      'uPlanetDiffuse', 'uTerminatorWrap', 'uRimStrength',
+      'uSunCoreR', 'uSunGlow', 'uGrainStrength', 'uStarfieldStrength'
+    ];
+    const locs = Object.fromEntries(uniformNames.map(n => [n, gl.getUniformLocation(prog, n)]));
+
+    const visual = { ringBrightness: 1.0, starfieldStrength: 1.0, timelapseSpeed: 1.2 };
+    let mode = 'scrub';
+    let showLabels = true;
+    let showUi = false;
+
+    const ammanNowInit = nowInAmman();
+    let selDate = [ammanNowInit.y, ammanNowInit.m, ammanNowInit.d];
+    const initDay = computeAmmanDay(selDate[0], selDate[1], selDate[2]);
+    let simHour = initDay[3];
+
+    const dateInput = document.getElementById('date-input');
+    dateInput.value = `${selDate[0]}-${String(selDate[1]).padStart(2, '0')}-${String(selDate[2]).padStart(2, '0')}`;
+
+    const timeSlider = document.getElementById('time-slider');
+    const prayerList = document.getElementById('prayer-list');
+
+    const prayerEls = PRAYERS.map((p, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:opacity-90 transition-all text-xs';
+      btn.innerHTML = `
+        <span class="flex items-center gap-2">
+          <span class="font-mono text-[var(--muted-foreground)]">${idx + 1}</span>
+          <span class="font-medium text-[var(--foreground)]">${p.name}</span>
+        </span>
+        <span class="flex items-center gap-3 font-mono tabular-nums">
+          <span data-angle class="text-[var(--muted-foreground)]">0.0°</span>
+          <span data-time class="font-semibold text-[var(--foreground)]">--:--</span>
+        </span>
+      `;
+      btn.addEventListener('click', () => {
+        setMode('scrub');
+        const d = computeAmmanDay(selDate[0], selDate[1], selDate[2]);
+        simHour = d[idx];
+        refreshUI();
+      });
+      prayerList.appendChild(btn);
+      return btn;
+    });
+
+    const btnLive = document.getElementById('mode-live');
+    const btnTimelapse = document.getElementById('mode-timelapse');
+
+    function setMode(next) {
+      mode = next;
+      const activeCls = 'px-2.5 py-1 rounded-md font-medium bg-[var(--primary)] text-[var(--primary-foreground)] transition-colors';
+      const idleCls = 'px-2.5 py-1 rounded-md font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors';
+      btnLive.className = mode === 'live' ? activeCls : idleCls;
+      btnTimelapse.className = mode === 'timelapse' ? activeCls : idleCls;
+      if (mode === 'live') {
+        const a = nowInAmman();
+        selDate = [a.y, a.m, a.d];
+        simHour = a.hour;
+        dateInput.value = `${selDate[0]}-${String(selDate[1]).padStart(2, '0')}-${String(selDate[2]).padStart(2, '0')}`;
+      }
+      refreshUI();
+    }
+
+    btnLive.addEventListener('click', () => setMode('live'));
+    btnTimelapse.addEventListener('click', () => setMode(mode === 'timelapse' ? 'scrub' : 'timelapse'));
+
+    dateInput.addEventListener('change', () => {
+      const parts = dateInput.value.split('-').map(Number);
+      if (parts.length === 3 && parts[0] > 1900) {
+        selDate = parts;
+        if (mode === 'live') setMode('scrub');
+        refreshUI();
+      }
+    });
+
+    timeSlider.addEventListener('input', () => {
+      if (mode !== 'scrub') setMode('scrub');
+      simHour = parseFloat(timeSlider.value) / 60.0;
+      refreshUI();
+    });
+
+    document.getElementById('toggle-labels').addEventListener('click', (e) => {
+      showLabels = !showLabels;
+      document.getElementById('orbit-labels').classList.toggle('hidden', !showLabels);
+      e.target.textContent = `Orbit Labels: ${showLabels ? 'On' : 'Off'}`;
+    });
+
+    document.getElementById('toggle-ui').addEventListener('click', (e) => {
+      showUi = !showUi;
+      document.getElementById('pixel-overlay').classList.toggle('hidden', !showUi);
+      e.target.textContent = `Pixel UI: ${showUi ? 'On' : 'Off'}`;
+    });
+
+    document.getElementById('sl-speed').addEventListener('input', (e) => {
+      visual.timelapseSpeed = parseFloat(e.target.value);
+      document.getElementById('val-speed').textContent = `${visual.timelapseSpeed.toFixed(1)} h/s`;
+    });
+    document.getElementById('sl-stars').addEventListener('input', (e) => {
+      visual.starfieldStrength = parseFloat(e.target.value);
+      document.getElementById('val-stars').textContent = `${visual.starfieldStrength.toFixed(2)}×`;
+    });
+    document.getElementById('sl-rbright').addEventListener('input', (e) => {
+      visual.ringBrightness = parseFloat(e.target.value);
+      document.getElementById('val-rbright').textContent = `${visual.ringBrightness.toFixed(2)}×`;
+    });
+
+    let lastOrbital = computeOrbitalState(selDate[0], selDate[1], selDate[2], simHour);
+
+    function refreshUI() {
+      lastOrbital = computeOrbitalState(selDate[0], selDate[1], selDate[2], simHour);
+      const tStr = fmtTime(simHour);
+      document.getElementById('time-readout').textContent = tStr;
+      document.getElementById('ui-clock').textContent = tStr;
+      document.getElementById('ui-status-time').textContent = tStr;
+      document.getElementById('footer-time').textContent = `Amman ${tStr} (UTC+3)`;
+
+      const dtObj = new Date(Date.UTC(selDate[0], selDate[1] - 1, selDate[2]));
+      document.getElementById('ui-date').textContent = dtObj.toLocaleDateString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC'
+      });
+
+      timeSlider.value = Math.round(simHour * 60) % 1440;
+
+      let alignedName = null;
+      for (let i = 0; i < 5; i++) {
+        const degVal = lastOrbital.angles[i] * 180 / Math.PI;
+        if (Math.abs(degVal) < 0.6) alignedName = PRAYERS[i].name;
+      }
+
+      const nextName = PRAYERS[lastOrbital.nextIdx].name;
+      const hrs = Math.floor(lastOrbital.minToNext / 60);
+      const mins = lastOrbital.minToNext % 60;
+      const cdStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+      document.getElementById('countdown-readout').textContent =
+        alignedName ? `${alignedName} centered` : `${nextName} in ${cdStr}`;
+      document.getElementById('footer-next').textContent =
+        alignedName ? `${alignedName} · Center aligned` : `Next: ${nextName} in ${cdStr}`;
+
+      for (let i = 0; i < 5; i++) {
+        const el = prayerEls[i];
+        const degVal = lastOrbital.angles[i] * 180 / Math.PI;
+        const isAligned = Math.abs(degVal) < 1.0;
+        const isNext = i === lastOrbital.nextIdx;
+        el.querySelector('[data-time]').textContent = fmtTime(lastOrbital.today[i]);
+        el.querySelector('[data-angle]').textContent = `${degVal >= 0 ? '+' : ''}${degVal.toFixed(1)}°`;
+        el.style.borderColor = isAligned ? 'var(--primary)' : '';
+        el.style.opacity = (isAligned || isNext) ? '1' : '0.82';
+      }
+    }
+
+    function drawFrame(ctx, program, locations, w, h, tSec, angles) {
+      const deg = Math.PI / 180.0;
+      ctx.viewport(0, 0, w, h);
+      ctx.useProgram(program);
+      ctx.uniform2f(locations.uResolution, w, h);
+      ctx.uniform1f(locations.uTime, tSec);
+
+      ctx.uniform3f(locations.uCamPos, 0.0, -13.0, 31.5);
+      ctx.uniform1f(locations.uCamPitch, 53.03 * deg);
+      ctx.uniform1f(locations.uCamYaw, 0.0);
+      ctx.uniform1f(locations.uFovY, 58.0 * deg);
+
+      ctx.uniform1f(locations.uRingWidth, 0.92);
+      ctx.uniform1f(locations.uRingBrightness, visual.ringBrightness);
+
+      ctx.uniform1fv(locations.uPlanetOrbitR, new Float32Array(PRAYERS.map(p => p.orbitR)));
+      ctx.uniform1fv(locations.uPlanetAngles, new Float32Array(angles));
+      ctx.uniform1fv(locations.uPlanetRadii, new Float32Array(PRAYERS.map(p => p.radius)));
+
+      ctx.uniform1f(locations.uPlanetDiffuse, 0.96);
+      ctx.uniform1f(locations.uTerminatorWrap, 0.72);
+      ctx.uniform1f(locations.uRimStrength, 0.14);
+
+      ctx.uniform1f(locations.uSunCoreR, 0.25);
+      ctx.uniform1f(locations.uSunGlow, 1.0);
+      ctx.uniform1f(locations.uGrainStrength, 0.65);
+      ctx.uniform1f(locations.uStarfieldStrength, visual.starfieldStrength);
+
+      ctx.drawArrays(ctx.TRIANGLES, 0, 3);
+    }
+
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const btn = document.getElementById('btn-export');
+      btn.textContent = 'Rendering 1280 × 2856…';
+      requestAnimationFrame(() => {
+        const off = document.createElement('canvas');
+        off.width = 1280;
+        off.height = 2856;
+        const offGl = off.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+        const offProg = buildProg(offGl);
+        const offLocs = Object.fromEntries(uniformNames.map(n => [n, offGl.getUniformLocation(offProg, n)]));
+        drawFrame(offGl, offProg, offLocs, 1280, 2856, 0.0, lastOrbital.angles);
+        offGl.finish();
+        const a = document.createElement('a');
+        a.href = off.toDataURL('image/png');
+        a.download = `falak_amman_${fmtTime(simHour).replace(':', '')}_1280x2856.png`;
+        a.click();
+        btn.textContent = 'Export Pixel 10 Pro PNG (1280 × 2856)';
+      });
+    });
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      const w = Math.max(128, Math.round(rect.width * dpr));
+      const h = Math.max(286, Math.round(rect.height * dpr));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+    }
+
+    let lastTs = performance.now();
+    let liveAccum = 0;
+
+    function tick(now) {
+      const dt = Math.min((now - lastTs) / 1000.0, 0.1);
+      lastTs = now;
+
+      if (mode === 'timelapse') {
+        simHour = (simHour + dt * visual.timelapseSpeed) % 24.0;
+        refreshUI();
+      } else if (mode === 'live') {
+        liveAccum += dt;
+        if (liveAccum >= 0.5) {
+          liveAccum = 0;
+          const a = nowInAmman();
+          selDate = [a.y, a.m, a.d];
+          simHour = a.hour;
+          refreshUI();
+        }
+      }
+
+      resize();
+      drawFrame(gl, prog, locs, canvas.width, canvas.height, now * 0.001, lastOrbital.angles);
+      requestAnimationFrame(tick);
+    }
+
+    setMode('scrub');
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>

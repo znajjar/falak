@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Falak</string>
+    <string name="wallpaper_label">Falak</string>
+    <string name="wallpaper_author">Falak</string>
+    <string name="wallpaper_description">Celestial orbital live wallpaper indicating daily Muslim prayer times for Amman.</string>
+    <string name="set_wallpaper_button">Set as Live Wallpaper</string>
+</resources>
