@@ -157,6 +157,11 @@ class FalakRenderer(
         GLES30.glBindVertexArray(0)
     }
 
+    private fun uniformArrayLoc(name: String): Int {
+        val loc = GLES30.glGetUniformLocation(program, name)
+        return if (loc >= 0) loc else GLES30.glGetUniformLocation(program, "$name[0]")
+    }
+
     private fun cacheUniforms() {
         uResolution = GLES30.glGetUniformLocation(program, "uResolution")
         uTime = GLES30.glGetUniformLocation(program, "uTime")
@@ -166,9 +171,9 @@ class FalakRenderer(
         uFovY = GLES30.glGetUniformLocation(program, "uFovY")
         uRingWidth = GLES30.glGetUniformLocation(program, "uRingWidth")
         uRingBrightness = GLES30.glGetUniformLocation(program, "uRingBrightness")
-        uPlanetOrbitR = GLES30.glGetUniformLocation(program, "uPlanetOrbitR")
-        uPlanetAngles = GLES30.glGetUniformLocation(program, "uPlanetAngles")
-        uPlanetRadii = GLES30.glGetUniformLocation(program, "uPlanetRadii")
+        uPlanetOrbitR = uniformArrayLoc("uPlanetOrbitR")
+        uPlanetAngles = uniformArrayLoc("uPlanetAngles")
+        uPlanetRadii = uniformArrayLoc("uPlanetRadii")
         uPlanetDiffuse = GLES30.glGetUniformLocation(program, "uPlanetDiffuse")
         uTerminatorWrap = GLES30.glGetUniformLocation(program, "uTerminatorWrap")
         uRimStrength = GLES30.glGetUniformLocation(program, "uRimStrength")

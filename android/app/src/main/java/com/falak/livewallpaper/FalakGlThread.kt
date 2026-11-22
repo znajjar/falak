@@ -209,6 +209,8 @@ class FalakGlThread(
                     }
                 }
             }
+        } catch (t: Throwable) {
+            Log.e(TAG, "Unexpected GL render thread error", t)
         } finally {
             releaseAll()
         }
@@ -221,26 +223,31 @@ class FalakGlThread(
         val version = IntArray(2)
         if (!EGL14.eglInitialize(eglDisplay, version, 0, version, 1)) return false
 
-        val configAttribs = intArrayOf(
-            EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
-            EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT,
-            EGL14.EGL_RED_SIZE, 8,
-            EGL14.EGL_GREEN_SIZE, 8,
-            EGL14.EGL_BLUE_SIZE, 8,
-            EGL14.EGL_ALPHA_SIZE, 8,
-            EGL14.EGL_DEPTH_SIZE, 0,
-            EGL14.EGL_STENCIL_SIZE, 0,
-            EGL14.EGL_NONE
-        )
-
         val configs = arrayOfNulls<EGLConfig>(1)
         val numConfigs = IntArray(1)
-        if (!EGL14.eglChooseConfig(eglDisplay, configAttribs, 0, configs, 0, 1, numConfigs, 0) ||
-            numConfigs[0] <= 0 || configs[0] == null
-        ) {
-            return false
+        val renderableTypes = intArrayOf(EGL_OPENGL_ES3_BIT_KHR, EGL14.EGL_OPENGL_ES2_BIT)
+        var chosen: EGLConfig? = null
+        for (renderable in renderableTypes) {
+            val configAttribs = intArrayOf(
+                EGL14.EGL_RENDERABLE_TYPE, renderable,
+                EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT,
+                EGL14.EGL_RED_SIZE, 8,
+                EGL14.EGL_GREEN_SIZE, 8,
+                EGL14.EGL_BLUE_SIZE, 8,
+                EGL14.EGL_ALPHA_SIZE, 8,
+                EGL14.EGL_DEPTH_SIZE, 0,
+                EGL14.EGL_STENCIL_SIZE, 0,
+                EGL14.EGL_NONE
+            )
+            if (EGL14.eglChooseConfig(eglDisplay, configAttribs, 0, configs, 0, 1, numConfigs, 0) &&
+                numConfigs[0] > 0 && configs[0] != null
+            ) {
+                chosen = configs[0]
+                break
+            }
         }
-        eglConfig = configs[0]
+        if (chosen == null) return false
+        eglConfig = chosen
 
         val contextAttribs = intArrayOf(
             EGL14.EGL_CONTEXT_CLIENT_VERSION, 3,
@@ -310,5 +317,6 @@ class FalakGlThread(
 
     companion object {
         private const val TAG = "FalakGlThread"
+        private const val EGL_OPENGL_ES3_BIT_KHR = 0x0040
     }
 }

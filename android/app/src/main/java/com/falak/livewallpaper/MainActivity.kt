@@ -78,7 +78,6 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        configureEdgeToEdge()
 
         val saved = FalakPreferences.load(this)
         currentLocation = saved.location
@@ -279,7 +278,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             val topInset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 insets.getInsets(WindowInsets.Type.statusBars() or WindowInsets.Type.displayCutout()).top
             } else {
-                insets.systemWindowInsetTop
+                maxOf(insets.systemWindowInsetTop, insets.displayCutout?.safeInsetTop ?: 0)
             }
             dockParams.topMargin = topInset + (10 * dp).toInt()
             dock.layoutParams = dockParams
@@ -287,6 +286,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         }
 
         setContentView(root)
+        configureEdgeToEdge()
         root.requestApplyInsets()
 
         glThread = FalakGlThread(
@@ -1051,21 +1051,39 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         try {
             startActivity(directIntent)
         } catch (_: Exception) {
-            startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER))
+            try {
+                startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER))
+            } catch (_: Exception) {
+                try {
+                    startActivity(Intent(Intent.ACTION_SET_WALLPAPER))
+                } catch (_: Exception) {
+                    // Device has no wallpaper picker activity available.
+                }
+            }
         }
     }
 
     @Suppress("DEPRECATION")
     private fun configureEdgeToEdge() {
+        val decor = window.decorView
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.setDecorFitsSystemWindows(false)
-            window.insetsController?.setSystemBarsAppearance(
-                0,
-                WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                    WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-            )
+            val applyAppearance = {
+                try {
+                    val controller = decor.windowInsetsController ?: window.insetsController
+                    controller?.setSystemBarsAppearance(
+                        0,
+                        WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                            WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                    )
+                } catch (_: Exception) {
+                    // Ignore OEM insets controller quirks on older Android 11/12 builds.
+                }
+            }
+            applyAppearance()
+            decor.post { applyAppearance() }
         } else {
-            window.decorView.systemUiVisibility =
+            decor.systemUiVisibility =
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
                     View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
                     View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
