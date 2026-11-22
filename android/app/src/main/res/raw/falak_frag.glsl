@@ -129,12 +129,14 @@ float computePrayerActivity() {
     return prayerActivity;
 }
 
-// Single pixel-sharp procedural star layer (distance evaluated strictly in native physical pixels)
+// Single pixel-sharp procedural star layer (radii evaluated strictly in native physical pixels
+// with power-skewed per-star size variation matching real stellar magnitude distribution)
 vec3 evalStarLayer(
     vec2 aspectUv,
     float gridDensity,
     float threshold,
-    float coreRadiusPx,
+    float minRadiusPx,
+    float maxRadiusPx,
     float minBright,
     float maxBright,
     vec2 seedOffset,
@@ -149,16 +151,20 @@ vec3 evalStarLayer(
     if (rnd.x <= threshold) return vec3(0.0);
 
     // Keep star safely inside cell interior so pixels never clip across cell borders
-    vec2 center = vec2(0.16) + 0.68 * hash22(cell + seedOffset * 1.73 + vec2(37.1, 19.4));
+    vec2 center = vec2(0.18) + 0.64 * hash22(cell + seedOffset * 1.73 + vec2(37.1, 19.4));
     float cellSizePx = uResolution.y / gridDensity;
     vec2 deltaPx = (f - center) * cellSizePx;
     float dPx = length(deltaPx);
 
-    // Razor-sharp physical-pixel pinpoint core (no blurry UV-scaled blobs at 495 PPI)
-    float core = exp(-pow(max(dPx / coreRadiusPx, 1e-5), 2.0));
-    float microHalo = 0.14 * exp(-pow(max(dPx / (coreRadiusPx * 2.4), 1e-5), 2.0));
+    // Power-skewed size & magnitude: most stars stay fine, occasional hero stars stand out crisply
+    float sizeT = pow(max(rnd.y, 1e-5), 1.75);
+    float rPx = mix(minRadiusPx, maxRadiusPx, sizeT);
 
-    float baseBright = mix(minBright, maxBright, rnd.y);
+    // Razor-sharp physical-pixel core + tight jewel-like Airy halo
+    float core = exp(-pow(max(dPx / rPx, 1e-5), 2.15));
+    float microHalo = 0.16 * exp(-pow(max(dPx / (rPx * 2.45), 1e-5), 2.0));
+
+    float baseBright = mix(minBright, maxBright, pow(max(rnd.y, 1e-5), 1.15));
 
     // Subtle spectral stellar temperature tint (cool blue-white to warm ivory)
     float spec = hash12(cell + seedOffset * 0.51);
@@ -173,21 +179,21 @@ vec3 evalStarLayer(
 
     float intensity = (core + microHalo) * baseBright * shimmer;
 
-    // Delicate 4-point diffraction micro-glint on brighter anchor stars at prayer-time peak
+    // Delicate 4-point diffraction micro-glint on brighter prominent stars at prayer-time peak
     if (addGlint && prayerFactor > 0.02) {
-        float glintPeak = prayerFactor * pow(max(wave, 1e-5), 4.0);
-        float armLen = coreRadiusPx * 4.2;
-        float armThick = max(0.55, coreRadiusPx * 0.55);
+        float glintPeak = prayerFactor * pow(max(wave, 1e-5), 4.0) * mix(0.45, 1.0, sizeT);
+        float armLen = rPx * 3.8;
+        float armThick = max(0.55, rPx * 0.42);
         float hArm = exp(-abs(deltaPx.x) / armLen) * exp(-pow(max(abs(deltaPx.y) / armThick, 1e-5), 2.0));
         float vArm = exp(-abs(deltaPx.y) / armLen) * exp(-pow(max(abs(deltaPx.x) / armThick, 1e-5), 2.0));
-        intensity += (hArm + vArm) * 0.28 * baseBright * glintPeak;
+        intensity += (hArm + vArm) * 0.30 * baseBright * glintPeak;
         tint = mix(tint, ACTIVE_TINT, 0.45 * glintPeak);
     }
 
     return tint * intensity;
 }
 
-// Native-resolution pinpoint starfield with prayer-time celestial sprinkle
+// Native-resolution varied-size sparse starfield with prayer-time celestial sprinkle
 vec3 evalStarfield(vec2 uv, float prayerFactor) {
     if (uStarfieldStrength <= 0.001) return vec3(0.0);
 
@@ -198,34 +204,34 @@ vec3 evalStarfield(vec2 uv, float prayerFactor) {
     vec2 aspectUv = vec2(uv.x * (uResolution.x / uResolution.y), uv.y);
     vec3 stars = vec3(0.0);
 
-    // Layer 1: crisp anchor stars (1.15 px sharp cores + prayer-time micro-glints)
-    stars += evalStarLayer(aspectUv, 26.0, 0.87, 1.15, 0.22, 0.52, vec2(11.3, 29.1), prayerFactor, true);
+    // Layer 1: sparse prominent hero stars (1.35..2.75 px crisp jewel cores + prayer-time glints)
+    stars += evalStarLayer(aspectUv, 18.0, 0.915, 1.35, 2.75, 0.34, 0.72, vec2(11.3, 29.1), prayerFactor, true);
 
-    // Layer 2: sharp mid-field pinpoint stars (0.85 px cores)
-    stars += evalStarLayer(aspectUv, 54.0, 0.89, 0.85, 0.12, 0.34, vec2(71.9, 5.4), prayerFactor, false);
+    // Layer 2: sparse mid-magnitude stars (0.75..1.55 px sharp cores)
+    stars += evalStarLayer(aspectUv, 40.0, 0.935, 0.75, 1.55, 0.16, 0.42, vec2(71.9, 5.4), prayerFactor, false);
 
-    // Layer 3: ultra-fine deep cosmic dust (0.65 px pinpoints)
-    stars += evalStarLayer(aspectUv, 98.0, 0.90, 0.65, 0.07, 0.20, vec2(43.7, 82.3), prayerFactor, false);
+    // Layer 3: sparse fine cosmic dust pinpoints (0.48..0.95 px)
+    stars += evalStarLayer(aspectUv, 84.0, 0.950, 0.48, 0.95, 0.07, 0.21, vec2(43.7, 82.3), prayerFactor, false);
 
-    // Layer 4: prayer-time "sprinkle" — delicate transient diamond pinpoints that awaken
-    // and gently blink across the dark sky exclusively during prayer alignment
+    // Layer 4: prayer-time "sprinkle" — sparse varied-size diamond pinpoints that awaken
+    // and gently twinkle across the dark sky exclusively during prayer alignment
     if (prayerFactor > 0.01) {
-        vec2 grid = aspectUv * 72.0;
+        vec2 grid = aspectUv * 58.0;
         vec2 cell = floor(grid);
         vec2 f = fract(grid);
         vec2 rnd = hash22(cell + vec2(93.1, 17.6));
-        if (rnd.x > 0.82) {
-            vec2 center = vec2(0.16) + 0.68 * hash22(cell + vec2(19.7, 61.2));
-            float cellSizePx = uResolution.y / 72.0;
+        if (rnd.x > 0.89) {
+            vec2 center = vec2(0.18) + 0.64 * hash22(cell + vec2(19.7, 61.2));
+            float cellSizePx = uResolution.y / 58.0;
             float dPx = length((f - center) * cellSizePx);
-            float pin = exp(-pow(max(dPx / 0.85, 1e-5), 2.0));
+            float spRadius = mix(0.65, 1.55, pow(max(rnd.y, 1e-5), 1.6));
+            float pin = exp(-pow(max(dPx / spRadius, 1e-5), 2.1));
 
             float phase = hash12(cell + vec2(5.9, 44.8)) * TAU;
-            float freq = mix(1.9, 4.4, rnd.y);
-            // Smooth sprinkle pulse: each star spends most time dark, then softly twinkles bright
+            float freq = mix(1.9, 4.2, rnd.y);
             float pulse = pow(max(0.5 + 0.5 * sin(uTime * freq + phase), 1e-5), 5.0);
             vec3 spTint = mix(vec3(0.90, 0.93, 1.0), ACTIVE_TINT, 0.65);
-            stars += spTint * pin * pulse * 0.62 * prayerFactor;
+            stars += spTint * pin * pulse * mix(0.45, 0.72, rnd.y) * prayerFactor;
         }
     }
 
