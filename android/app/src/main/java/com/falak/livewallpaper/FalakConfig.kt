@@ -3,7 +3,8 @@ package com.falak.livewallpaper
 import kotlin.math.PI
 
 /**
- * Calibrated celestial scene parameters for Falak on Google Pixel 10 Pro (1280 x 2856, 20:9).
+ * Calibrated responsive celestial scene parameters for Falak across any vertical phone screen
+ * size and aspect ratio, optimized for LTPO OLED displays.
  */
 data class FalakConfig(
     // Camera positioned below the orbital plane looking upward across the 5 prayer arches

@@ -49,10 +49,11 @@ def hour_angle_for_alt(lat_rad: float, decl: float, alt_deg: float) -> float:
 
 
 def amman_prayers_hours(year: int, month: int, day: int, cfg: dict):
-    loc = cfg["location"]
+    loc = cfg["defaultLocation"]
+    method = cfg["calculationSources"][0]
     lat_r = math.radians(loc["latitudeDeg"])
     lon = loc["longitudeDeg"]
-    tz = loc["utcOffsetHours"]
+    tz = 3.0
     jd0 = julian_day(year, month, day) - lon / 360.0
 
     def calc(approx_h, fn):
@@ -60,17 +61,17 @@ def amman_prayers_hours(year: int, month: int, day: int, cfg: dict):
         noon = 12.0 + tz - lon / 15.0 - eqt
         return fn(noon, decl)
 
-    fajr = calc(5.0, lambda n, d: n - hour_angle_for_alt(lat_r, d, -loc["fajrAngleDeg"]))
+    fajr = calc(5.0, lambda n, d: n - hour_angle_for_alt(lat_r, d, -method["fajrAngleDeg"]))
     dhuhr = calc(12.3, lambda n, d: n)
     asr = calc(
         15.3,
         lambda n, d: n
         + hour_angle_for_alt(
-            lat_r, d, math.degrees(math.atan(1.0 / (loc["asrShadowFactor"] + math.tan(abs(lat_r - d)))))
+            lat_r, d, math.degrees(math.atan(1.0 / (method["asrShadowFactor"] + math.tan(abs(lat_r - d)))))
         ),
     )
-    maghrib = calc(17.5, lambda n, d: n + hour_angle_for_alt(lat_r, d, -0.8333))
-    isha = calc(19.0, lambda n, d: n + hour_angle_for_alt(lat_r, d, -loc["ishaAngleDeg"]))
+    maghrib = calc(17.5, lambda n, d: n + hour_angle_for_alt(lat_r, d, -method["maghribAngleDeg"]))
+    isha = calc(19.0, lambda n, d: n + hour_angle_for_alt(lat_r, d, -method["ishaAngleDeg"]))
     return [fajr, dhuhr, asr, maghrib, isha]
 
 
@@ -148,7 +149,7 @@ window.renderOne = (w, h, angles) => {{
   gl.uniform1f(u('uTerminatorWrap'), cfg.planetShading.terminatorWrap);
   gl.uniform1f(u('uRimStrength'), cfg.planetShading.rimStrength);
 
-  gl.uniform1f(u('uSunCoreR'), cfg.star.coreRadiusNorm);
+  gl.uniform1f(u('uSunCoreR'), cfg.star.coreRadiusWidthNorm);
   gl.uniform1f(u('uSunGlow'), cfg.star.glowIntensity);
   gl.uniform1f(u('uGrainStrength'), cfg.atmosphere.grainStrength);
   gl.uniform1f(u('uStarfieldStrength'), cfg.atmosphere.starfieldStrength);
@@ -192,9 +193,8 @@ def main():
     frag_src = (ROOT / "model/falak.frag").read_text()
     cfg = json.loads((ROOT / "model/scene_config.json").read_text())
 
-    _, today = compute_angles_for_hour(2026, 11, 21, 12.0, cfg)
-    w_dev = cfg["targetDevice"]["widthPx"]
-    h_dev = cfg["targetDevice"]["heightPx"]
+    _, today = compute_angles_for_hour(2026, 11, 22, 12.0, cfg)
+    w_dev, h_dev = 1080, 2400
 
     sheet_times = [
         (f"Fajr {fmt_h(today[0])}", today[0]),
@@ -206,16 +206,16 @@ def main():
     ]
 
     jobs = []
-    sw, sh = 360, 804
+    sw, sh = 360, 800
     for _, h_val in sheet_times:
-        ang, _ = compute_angles_for_hour(2026, 11, 21, h_val, cfg)
+        ang, _ = compute_angles_for_hour(2026, 11, 22, h_val, cfg)
         jobs.append((sw, sh, ang))
 
-    # Native 1280x2856 showcase frame with all 5 planets gracefully staggered across the arches
+    # Native 1080x2400 showcase frame with all 5 planets gracefully staggered across the arches
     jobs.append((w_dev, h_dev, [-0.26, -0.13, 0.0, 0.10, -0.065]))
 
     imgs = render_batch(vert_src, frag_src, cfg, jobs)
-    imgs[-1].save(OUT_DIR / "falak_showcase_1280x2856.png", optimize=True)
+    imgs[-1].save(OUT_DIR / "falak_showcase.png", optimize=True)
 
     gap = 10
     header = 34
@@ -226,7 +226,7 @@ def main():
         sheet.paste(im, (x0, header))
         draw.text((x0 + 10, 10), f"Falak · Amman {label}", fill=(215, 218, 226))
     sheet.save(OUT_DIR / "falak_amman_sheet.png")
-    print("Saved falak_showcase_1280x2856.png and falak_amman_sheet.png.")
+    print("Saved falak_showcase.png and falak_amman_sheet.png.")
 
 
 if __name__ == "__main__":

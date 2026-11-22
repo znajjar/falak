@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Falak — Worldwide Celestial Prayer Wallpaper (Pixel 10 Pro)</title>
+  <title>Falak — Worldwide Celestial Prayer Wallpaper</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     .phone-frame {
-      width: min(306px, 84vw);
-      aspect-ratio: 1280 / 2856;
+      height: min(650px, 76vh);
+      max-width: 84vw;
+      aspect-ratio: 1080 / 2400;
     }
     input[type="range"] {
       height: 4px;
@@ -26,10 +27,19 @@
           Falak — Worldwide Prayer Orbits
         </h1>
         <p id="header-meta" class="text-xs text-[var(--muted-foreground)] mt-0.5 font-mono">
-          Pixel 10 Pro · 1280 × 2856 · Amman, Jordan (31.95°N, 35.91°E · UTC+3) · Jordan Awqaf
+          LTPO OLED · 20:9 (1080 × 2400) · Amman, Jordan (31.95°N, 35.95°E · UTC+3) · Jordan Awqaf
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
+        <select id="ratio-select" aria-label="Phone Screen Aspect Ratio" class="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs font-mono text-[var(--foreground)] outline-none">
+          <option value="1080x1920">16:9 (1080×1920)</option>
+          <option value="1080x2160">18:9 (1080×2160)</option>
+          <option value="1170x2532">19.5:9 (1170×2532)</option>
+          <option value="1080x2400" selected>20:9 (1080×2400)</option>
+          <option value="1080x2520">21:9 (1080×2520)</option>
+          <option value="1080x2640">22:9 (1080×2640)</option>
+          <option value="1812x2176">5:6 Foldable (1812×2176)</option>
+        </select>
         <div class="inline-flex rounded-lg border border-[var(--border)] bg-[var(--card)] p-0.5 text-xs" role="group">
           <button id="mode-live" class="px-2.5 py-1 rounded-md font-medium bg-[var(--primary)] text-[var(--primary-foreground)] transition-colors">Live</button>
           <button id="mode-timelapse" class="px-2.5 py-1 rounded-md font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">24h Timelapse</button>
@@ -38,7 +48,7 @@
           Orbit Labels: On
         </button>
         <button id="toggle-ui" class="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs font-medium text-[var(--foreground)] hover:opacity-90">
-          Pixel UI: Off
+          Lockscreen UI: Off
         </button>
       </div>
     </header>
@@ -46,10 +56,10 @@
     <!-- Main workspace -->
     <main class="grid grid-cols-1 md:grid-cols-[minmax(280px,1fr)_372px] gap-4 items-start">
 
-      <!-- Left: Pixel 10 Pro Live Viewport -->
+      <!-- Left: Responsive Vertical Phone Live Viewport -->
       <section class="flex flex-col items-center justify-center gap-2.5">
         <div class="relative rounded-[2.15rem] p-[7px] bg-[var(--card)] border border-[var(--border)] shadow-lg">
-          <div class="phone-frame relative overflow-hidden rounded-[1.8rem] bg-[#0c0d10] select-none">
+          <div id="phone-frame" class="phone-frame relative overflow-hidden rounded-[1.8rem] bg-[#0c0d10] select-none">
             <canvas id="gl-canvas" class="w-full h-full block"></canvas>
 
             <!-- Subtle orbit legend overlay -->
@@ -61,8 +71,8 @@
               <span class="absolute left-3" style="top: 76.5%;">Fajr</span>
             </div>
 
-            <!-- Optional Pixel 10 Pro Lockscreen Overlay -->
-            <div id="pixel-overlay" class="hidden pointer-events-none absolute inset-0 flex flex-col justify-between p-4 text-white/75">
+            <!-- Optional Android Lockscreen Overlay -->
+            <div id="lockscreen-overlay" class="hidden pointer-events-none absolute inset-0 flex flex-col justify-between p-4 text-white/75">
               <div class="flex flex-col items-center">
                 <div class="w-full flex items-center justify-between px-2 pt-0.5 text-xs font-medium tracking-tight opacity-80">
                   <span id="ui-status-time">15:14</span>
@@ -84,7 +94,7 @@
         <div class="flex flex-wrap items-center justify-center gap-2 text-xs text-[var(--muted-foreground)] font-mono tabular-nums">
           <span id="footer-time">Amman 15:14 (UTC+3)</span>
           <span>·</span>
-          <span id="footer-next">Next: Maghrib in 1h 20m</span>
+          <span id="footer-next">Next: Maghrib in 2h 26m</span>
         </div>
       </section>
 
@@ -205,7 +215,7 @@
         </div>
 
         <button id="btn-export" class="w-full py-2 px-3 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-medium hover:opacity-90 transition-opacity">
-          Export Pixel 10 Pro PNG (1280 × 2856)
+          Export Wallpaper PNG (1080 × 2400)
         </button>
       </aside>
     </main>
@@ -227,44 +237,64 @@ void main() {
     const FRAG_SRC = `#version 300 es
 precision highp float;
 
+// Falak — Celestial Prayer-Time Orbital Shader (v1.1.0)
+// Portable GLSL ES 3.00 (Android OpenGL ES 3.0 + WebGL2).
+//
+// Responsive design for any vertical phone screen size and aspect ratio (16:9 to 22:9+ & foldables),
+// optimized for LTPO OLED displays:
+//   - Deep obsidian-grey sky (#0B0B0D -> #111214) with resolution-aware razor-sharp starfield
+//     that gently sprinkles/sparkles when any prayer aligns at center meridian.
+//   - Warm incandescent ivory star rising exactly 35% above the bottom edge with 1.5x glow,
+//     scaling proportionally across any vertical aspect ratio.
+//   - Strictly the 5 active prayer orbits (Fajr, Dhuhr, Asr, Maghrib, Isha) with vertical
+//     astrolabe meridian pips and localized orbital trails.
+//   - Five sculpted 3D spheres with subtle mineral shading and warm backlit limb crescents.
+
 in vec2 vUv;
 out vec4 fragColor;
 
 uniform vec2 uResolution;
 uniform float uTime;
 
+// Camera
 uniform vec3 uCamPos;
 uniform float uCamPitch;
 uniform float uCamYaw;
 uniform float uFovY;
 
+// Active 5 prayer orbits
 uniform float uRingWidth;
 uniform float uRingBrightness;
 
+// Five prayer planets: [0]=Fajr, [1]=Dhuhr, [2]=Asr, [3]=Maghrib, [4]=Isha
 uniform float uPlanetOrbitR[5];
-uniform float uPlanetAngles[5];
+uniform float uPlanetAngles[5]; // signed radians in [-PI, PI); 0.0 = center meridian (prayer time)
 uniform float uPlanetRadii[5];
 
+// Planet shading & palette
 uniform float uPlanetDiffuse;
 uniform float uTerminatorWrap;
 uniform float uRimStrength;
 
-uniform float uSunCoreR;
-uniform float uSunGlow;
+// Bottom star
+uniform float uSunCoreR;       // 0.25 W => diameter = half phone screen width (capped cleanly on wide ratios)
+uniform float uSunGlow;        // default 1.5
 
+// Deep space texture
 uniform float uGrainStrength;
 uniform float uStarfieldStrength;
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
 
-const vec3 BG_ZENITH    = vec3(0.042, 0.044, 0.050);
-const vec3 BG_HORIZON   = vec3(0.068, 0.070, 0.078);
-const vec3 PLANET_NIGHT = vec3(0.072, 0.075, 0.084);
-const vec3 STAR_TINT    = vec3(1.000, 0.968, 0.915);
-const vec3 CORONA_TINT  = vec3(0.965, 0.935, 0.890);
-const vec3 ORBIT_TINT   = vec3(0.840, 0.865, 0.910);
-const vec3 ACTIVE_TINT  = vec3(1.000, 0.960, 0.900);
+// Color palette — deep cool obsidian-grey space vs. warm incandescent ivory starlight
+const vec3 BG_ZENITH    = vec3(0.042, 0.044, 0.050); // ~#0B0B0D
+const vec3 BG_HORIZON   = vec3(0.068, 0.070, 0.078); // ~#111214
+const vec3 PLANET_NIGHT = vec3(0.072, 0.075, 0.084); // ~#121315
+const vec3 STAR_TINT    = vec3(1.000, 0.968, 0.915); // warm ivory starlight
+const vec3 CORONA_TINT  = vec3(0.965, 0.935, 0.890); // muted champagne-silver glow
+const vec3 ORBIT_TINT   = vec3(0.840, 0.865, 0.910); // crisp cool silver-slate orbits
+const vec3 ACTIVE_TINT  = vec3(1.000, 0.960, 0.900); // warm highlight on prayer alignment
 
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -325,15 +355,25 @@ float filmGrain(vec2 fragCoord) {
     return (n1 + n2) - 1.0;
 }
 
+// Compute prayer-time proximity in [0, 1] across all 5 planets.
+// Peaks at 1.0 when any planet crosses center meridian (0 deg), smoothly tapering over ~15 min.
 float computePrayerActivity() {
     float prayerActivity = 0.0;
     for (int i = 0; i < 5; i++) {
         float a = abs(uPlanetAngles[i]);
+        // 0.046 rad (~2.6 deg ~= 10.5 min) smooth Gaussian bell
         prayerActivity = max(prayerActivity, exp(-pow(max(a / 0.046, 1e-5), 2.0)));
     }
     return prayerActivity;
 }
 
+// Responsive star radius (in viewport-height units) across any vertical aspect ratio
+float computeResponsiveStarRadiusH(float aspect) {
+    return clamp(max(uSunCoreR, 0.02) * aspect, 0.095, 0.132);
+}
+
+// Single pixel-sharp procedural star layer (radii scaled cleanly to display resolution
+// so stars maintain crisp pinpoint aesthetics across HD+, FHD+, QHD+, and foldable screens)
 vec3 evalStarLayer(
     vec2 aspectUv,
     float gridDensity,
@@ -344,6 +384,7 @@ vec3 evalStarLayer(
     float maxBright,
     vec2 seedOffset,
     float prayerFactor,
+    float pxScale,
     bool addGlint
 ) {
     vec2 grid = aspectUv * gridDensity;
@@ -353,21 +394,27 @@ vec3 evalStarLayer(
     vec2 rnd = hash22(cell + seedOffset);
     if (rnd.x <= threshold) return vec3(0.0);
 
+    // Keep star safely inside cell interior so pixels never clip across cell borders
     vec2 center = vec2(0.18) + 0.64 * hash22(cell + seedOffset * 1.73 + vec2(37.1, 19.4));
     float cellSizePx = uResolution.y / gridDensity;
     vec2 deltaPx = (f - center) * cellSizePx;
     float dPx = length(deltaPx);
 
+    // Power-skewed size & magnitude: most stars stay fine, occasional hero stars stand out crisply
     float sizeT = pow(max(rnd.y, 1e-5), 1.75);
-    float rPx = mix(minRadiusPx, maxRadiusPx, sizeT);
+    float rPx = max(0.45, mix(minRadiusPx, maxRadiusPx, sizeT) * pxScale);
 
+    // Razor-sharp physical-pixel core + tight jewel-like Airy halo
     float core = exp(-pow(max(dPx / rPx, 1e-5), 2.15));
     float microHalo = 0.16 * exp(-pow(max(dPx / (rPx * 2.45), 1e-5), 2.0));
+
     float baseBright = mix(minBright, maxBright, pow(max(rnd.y, 1e-5), 1.15));
 
+    // Subtle spectral stellar temperature tint (cool blue-white to warm ivory)
     float spec = hash12(cell + seedOffset * 0.51);
     vec3 tint = mix(vec3(0.82, 0.88, 1.0), vec3(1.0, 0.95, 0.86), spec);
 
+    // Gentle, desynchronized celestial "sprinkle" shimmer when it is prayer time
     float phase = hash12(cell + seedOffset * 2.31) * TAU;
     float freq = mix(1.35, 3.15, fract(rnd.y * 7.13));
     float wave = 0.5 + 0.5 * sin(uTime * freq + phase);
@@ -376,10 +423,11 @@ vec3 evalStarLayer(
 
     float intensity = (core + microHalo) * baseBright * shimmer;
 
+    // Delicate 4-point diffraction micro-glint on brighter prominent stars at prayer-time peak
     if (addGlint && prayerFactor > 0.02) {
         float glintPeak = prayerFactor * pow(max(wave, 1e-5), 4.0) * mix(0.45, 1.0, sizeT);
         float armLen = rPx * 3.8;
-        float armThick = max(0.55, rPx * 0.42);
+        float armThick = max(0.50, rPx * 0.42);
         float hArm = exp(-abs(deltaPx.x) / armLen) * exp(-pow(max(abs(deltaPx.y) / armThick, 1e-5), 2.0));
         float vArm = exp(-abs(deltaPx.y) / armLen) * exp(-pow(max(abs(deltaPx.x) / armThick, 1e-5), 2.0));
         intensity += (hArm + vArm) * 0.30 * baseBright * glintPeak;
@@ -389,18 +437,28 @@ vec3 evalStarLayer(
     return tint * intensity;
 }
 
-vec3 evalStarfield(vec2 uv, float prayerFactor) {
+// Native-resolution varied-size sparse starfield with prayer-time celestial sprinkle
+vec3 evalStarfield(vec2 uv, float prayerFactor, float aspect, float rCoreH, float pxScale) {
     if (uStarfieldStrength <= 0.001) return vec3(0.0);
-    float skyMask = smoothstep(0.16, 0.46, uv.y);
+
+    // Fade gently above the bottom star corona while filling the deep obsidian sky
+    float skyMask = smoothstep(rCoreH * 1.4, rCoreH * 4.1, uv.y);
     if (skyMask <= 0.001) return vec3(0.0);
 
-    vec2 aspectUv = vec2(uv.x * (uResolution.x / uResolution.y), uv.y);
+    vec2 aspectUv = vec2(uv.x * aspect, uv.y);
     vec3 stars = vec3(0.0);
 
-    stars += evalStarLayer(aspectUv, 18.0, 0.915, 1.35, 2.75, 0.34, 0.72, vec2(11.3, 29.1), prayerFactor, true);
-    stars += evalStarLayer(aspectUv, 40.0, 0.935, 0.75, 1.55, 0.16, 0.42, vec2(71.9, 5.4), prayerFactor, false);
-    stars += evalStarLayer(aspectUv, 84.0, 0.950, 0.48, 0.95, 0.07, 0.21, vec2(43.7, 82.3), prayerFactor, false);
+    // Layer 1: sparse prominent hero stars (crisp jewel cores + prayer-time glints)
+    stars += evalStarLayer(aspectUv, 18.0, 0.915, 1.35, 2.75, 0.34, 0.72, vec2(11.3, 29.1), prayerFactor, pxScale, true);
 
+    // Layer 2: sparse mid-magnitude stars
+    stars += evalStarLayer(aspectUv, 40.0, 0.935, 0.75, 1.55, 0.16, 0.42, vec2(71.9, 5.4), prayerFactor, pxScale, false);
+
+    // Layer 3: sparse fine cosmic dust pinpoints
+    stars += evalStarLayer(aspectUv, 84.0, 0.950, 0.48, 0.95, 0.07, 0.21, vec2(43.7, 82.3), prayerFactor, pxScale, false);
+
+    // Layer 4: prayer-time "sprinkle" — sparse varied-size diamond pinpoints that awaken
+    // and gently twinkle across the dark sky exclusively during prayer alignment
     if (prayerFactor > 0.01) {
         vec2 grid = aspectUv * 58.0;
         vec2 cell = floor(grid);
@@ -410,7 +468,7 @@ vec3 evalStarfield(vec2 uv, float prayerFactor) {
             vec2 center = vec2(0.18) + 0.64 * hash22(cell + vec2(19.7, 61.2));
             float cellSizePx = uResolution.y / 58.0;
             float dPx = length((f - center) * cellSizePx);
-            float spRadius = mix(0.65, 1.55, pow(max(rnd.y, 1e-5), 1.6));
+            float spRadius = max(0.50, mix(0.65, 1.55, pow(max(rnd.y, 1e-5), 1.6)) * pxScale);
             float pin = exp(-pow(max(dPx / spRadius, 1e-5), 2.1));
 
             float phase = hash12(cell + vec2(5.9, 44.8)) * TAU;
@@ -429,6 +487,7 @@ void buildCameraBasis(float yaw, float pitch, out vec3 right, out vec3 up, out v
     float sy = sin(yaw);
     float cp = cos(pitch);
     float sp = sin(pitch);
+
     fwd   = vec3(-sy * cp, sp, -cy * cp);
     right = vec3(cy, 0.0, -sy);
     up    = cross(right, fwd);
@@ -448,6 +507,7 @@ float wrapAngleDiff(float a, float b) {
     return mod(d + PI, 2.0 * PI) - PI;
 }
 
+// Evaluate ONLY the 5 active prayer orbits + subtle center meridian astrolabe pips
 vec4 evalOrbitalPlane(vec3 ro, vec3 rd, vec3 rdDx, vec3 rdDy, float resScale) {
     float t = intersectOrbitalPlane(ro, rd);
     if (t <= 0.0) return vec4(0.0, 0.0, 0.0, 1e9);
@@ -520,7 +580,18 @@ vec4 evalOrbitalPlane(vec3 ro, vec3 rd, vec3 rdDx, vec3 rdDy, float resScale) {
     return vec4(accum, t);
 }
 
-vec4 evalPlanet(vec3 ro, vec3 rd, vec3 planetPos, float planetR, vec3 sunPos, float focal, float alignBoost, float planetSeed, out float tHit) {
+// Evaluate a single sculpted 3D planet sphere with subtle mineral surface shading & warm backlit rim
+vec4 evalPlanet(
+    vec3 ro,
+    vec3 rd,
+    vec3 planetPos,
+    float planetR,
+    vec3 sunPos,
+    float focal,
+    float alignBoost,
+    float planetSeed,
+    out float tHit
+) {
     vec3 oc = ro - planetPos;
     float b = dot(oc, rd);
     float c = dot(oc, oc) - planetR * planetR;
@@ -583,43 +654,62 @@ vec4 evalPlanet(vec3 ro, vec3 rd, vec3 planetPos, float planetR, vec3 sunPos, fl
     return vec4(rgb, alpha);
 }
 
-vec3 evalSun(vec3 ro, vec3 sunPos, vec2 ndc, float focal, vec3 camRight, vec3 camUp, vec3 camFwd, float nearestPlanetAlpha, float nearestPlanetT) {
+// Rising bottom star: responsive diameter (0.50 W on standard vertical phones, capped safely on wide ratios)
+// pinned so exactly 35% of the star disc rises above the bottom edge + rich 1.5x atmospheric corona
+vec3 evalSun(
+    vec3 ro,
+    vec3 sunPos,
+    vec2 ndc,
+    float focal,
+    vec3 camRight,
+    vec3 camUp,
+    vec3 camFwd,
+    float rCoreH,
+    float nearestPlanetAlpha,
+    float nearestPlanetT
+) {
     vec3 toSun = sunPos - ro;
     float zSun = dot(toSun, camFwd);
     if (zSun <= 0.0) return vec3(0.0);
 
     vec2 sunNdc = vec2(dot(toSun, camRight), dot(toSun, camUp)) * (focal / zSun);
-    float aspect = uResolution.x / uResolution.y;
-    float rNorm = length(ndc - sunNdc) / aspect;
+    // Keep exact 35% rising fraction above bottom edge (ndc.y = -0.5) on any vertical aspect ratio
+    vec2 sunCenterNdc = vec2(sunNdc.x, -0.5 - 0.30 * rCoreH);
+    float rUnit = length(ndc - sunCenterNdc) / rCoreH;
 
-    float rCore = max(uSunCoreR, 0.02);
-    float coreBody = 1.0 - smoothstep(rCore * 0.93, rCore * 1.03, rNorm);
-
-    float limbGrad = smoothstep(rCore * 0.55, rCore * 0.98, rNorm);
+    float coreBody = 1.0 - smoothstep(0.93, 1.03, rUnit);
+    float limbGrad = smoothstep(0.55, 0.98, rUnit);
     vec3 coreCol = mix(vec3(1.0, 0.995, 0.985), STAR_TINT, limbGrad);
 
-    float dEdge = max(rNorm - rCore, 0.0);
+    float dEdgeUnit = max(rUnit - 1.0, 0.0);
+    // Glow intensity scales cleanly with uSunGlow (1.5x default) while keeping limb rolloff silky
     float glowScale = max(uSunGlow, 0.0);
     float spread = mix(1.0, 1.24, clamp(glowScale - 1.0, 0.0, 1.0));
-    float innerCorona = 0.56 * exp(-pow(max(dEdge / (rCore * 0.42 * spread), 1e-5), 1.22));
-    float outerBloom  = 0.24 * exp(-pow(max(dEdge / (rCore * 1.22 * spread), 1e-5), 1.78));
+    float innerCorona = 0.56 * exp(-pow(max(dEdgeUnit / (0.42 * spread), 1e-5), 1.22));
+    float outerBloom  = 0.24 * exp(-pow(max(dEdgeUnit / (1.22 * spread), 1e-5), 1.78));
 
     float eclipseMask = (nearestPlanetT < zSun) ? (1.0 - nearestPlanetAlpha) : 1.0;
     vec3 rawGlow = (STAR_TINT * innerCorona + CORONA_TINT * outerBloom) * glowScale;
+    // Soft filmic compression prevents hard white clipping beyond the star limb at 1.5x glow
     vec3 glowCol = (1.0 - exp(-rawGlow * 1.28)) * mix(1.0, 0.35, 1.0 - eclipseMask);
 
     return max(coreCol * coreBody * 1.05 * eclipseMask, glowCol);
 }
 
 void main() {
-    float resScale = uResolution.y / 1024.0;
+    float safeH = max(uResolution.y, 1.0);
+    float aspect = uResolution.x / safeH;
+    float diagScale = sqrt(max(uResolution.x * safeH, 1.0));
+    float resScale = diagScale / 685.5;
+    float pxScale = clamp(diagScale / 1912.0, 0.50, 1.40);
+    float rCoreH = computeResponsiveStarRadiusH(aspect);
     float focal = 0.5 / tan(0.5 * uFovY);
 
     vec3 camRight, camUp, camFwd;
     buildCameraBasis(uCamYaw, uCamPitch, camRight, camUp, camFwd);
 
-    vec2 ndc = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;
-    vec2 pxStep = vec2(1.0 / uResolution.y);
+    vec2 ndc = (gl_FragCoord.xy - 0.5 * uResolution) / safeH;
+    vec2 pxStep = vec2(1.0 / safeH);
 
     vec3 rd   = getRayDir(ndc, focal, camRight, camUp, camFwd);
     vec3 rdDx = getRayDir(ndc + vec2(pxStep.x, 0.0), focal, camRight, camUp, camFwd);
@@ -628,13 +718,16 @@ void main() {
     vec3 sunPos = vec3(0.0);
     float prayerFactor = computePrayerActivity();
 
+    // 1. Deep obsidian-grey space gradient + resolution-aware crisp starfield (with prayer-time sprinkle)
     vec3 col = mix(BG_HORIZON, BG_ZENITH, smoothstep(0.10, 0.85, vUv.y));
-    col += evalStarfield(vUv, prayerFactor);
+    col += evalStarfield(vUv, prayerFactor, aspect, rCoreH, pxScale);
 
+    // 2. Five active prayer orbits + astrolabe meridian pips
     vec4 orbitEval = evalOrbitalPlane(uCamPos, rd, rdDx, rdDy, resScale);
     vec3 orbitRgb = orbitEval.rgb;
     float tRing = orbitEval.a;
 
+    // 3. Five sculpted 3D prayer planets (foreground sector in front of star)
     float nearestT = 1e9;
     vec4 nearestPlanet = vec4(0.0);
 
@@ -646,13 +739,16 @@ void main() {
 
         float alignBoost = exp(-pow(max(abs(ang) / 0.055, 1e-5), 2.0));
         float tHit = 1e9;
-        vec4 pCol = evalPlanet(uCamPos, rd, pPos, uPlanetRadii[i], sunPos, focal, alignBoost, float(i) + 1.0, tHit);
+        vec4 pCol = evalPlanet(
+            uCamPos, rd, pPos, uPlanetRadii[i], sunPos, focal, alignBoost, float(i) + 1.0, tHit
+        );
         if (pCol.a > 0.001 && tHit < nearestT) {
             nearestT = tHit;
             nearestPlanet = pCol;
         }
     }
 
+    // 4. Exact 3D depth-sorted compositing between orbital arcs and planet spheres
     if (nearestPlanet.a > 0.001 && nearestT < tRing) {
         col += orbitRgb;
         col = mix(col, nearestPlanet.rgb, nearestPlanet.a);
@@ -663,9 +759,11 @@ void main() {
         col += orbitRgb;
     }
 
-    vec3 sunAdd = evalSun(uCamPos, sunPos, ndc, focal, camRight, camUp, camFwd, nearestPlanet.a, nearestT);
+    // 5. Responsive warm-ivory bottom star (exact 35% rising above bottom edge, 1.5x glow)
+    vec3 sunAdd = evalSun(uCamPos, sunPos, ndc, focal, camRight, camUp, camFwd, rCoreH, nearestPlanet.a, nearestT);
     col = clamp(col + sunAdd, 0.0, 1.0);
 
+    // 6. Native 1x1 per-pixel micro-dither (eliminates OLED gradient banding with zero blocky grain)
     float grain = filmGrain(gl_FragCoord.xy) * 0.0045 * uGrainStrength;
     col = clamp(col + vec3(grain), 0.0, 1.0);
 
@@ -1203,6 +1301,24 @@ void main() {
       refreshUI();
     });
 
+    const ratioSelect = document.getElementById('ratio-select');
+    const phoneFrame = document.getElementById('phone-frame');
+    let exportW = 1080;
+    let exportH = 2400;
+    let ratioLabel = '20:9';
+
+    function applySelectedRatio() {
+      const [w, h] = ratioSelect.value.split('x').map(Number);
+      exportW = w;
+      exportH = h;
+      ratioLabel = ratioSelect.options[ratioSelect.selectedIndex].textContent.split(' ')[0];
+      phoneFrame.style.aspectRatio = `${w} / ${h}`;
+      document.getElementById('btn-export').textContent = `Export Wallpaper PNG (${w} × ${h})`;
+      refreshUI();
+    }
+
+    ratioSelect.addEventListener('change', applySelectedRatio);
+
     document.getElementById('toggle-labels').addEventListener('click', (e) => {
       showLabels = !showLabels;
       document.getElementById('orbit-labels').classList.toggle('hidden', !showLabels);
@@ -1211,8 +1327,8 @@ void main() {
 
     document.getElementById('toggle-ui').addEventListener('click', (e) => {
       showUi = !showUi;
-      document.getElementById('pixel-overlay').classList.toggle('hidden', !showUi);
-      e.target.textContent = `Pixel UI: ${showUi ? 'On' : 'Off'}`;
+      document.getElementById('lockscreen-overlay').classList.toggle('hidden', !showUi);
+      e.target.textContent = `Lockscreen UI: ${showUi ? 'On' : 'Off'}`;
     });
 
     document.getElementById('sl-speed').addEventListener('input', (e) => {
@@ -1241,7 +1357,7 @@ void main() {
       const locTitle = currentLoc.country ? `${currentLoc.name}, ${currentLoc.country}` : currentLoc.name;
 
       document.getElementById('header-meta').textContent =
-        `Pixel 10 Pro · 1280 × 2856 · ${locTitle} (${fmtCoords(currentLoc)} · ${utcOff}) · ${currentMethod.shortName}`;
+        `LTPO OLED · ${ratioLabel} (${exportW} × ${exportH}) · ${locTitle} (${fmtCoords(currentLoc)} · ${utcOff}) · ${currentMethod.shortName}`;
       document.getElementById('local-time-heading').textContent = `${currentLoc.name} Local Time`;
       document.getElementById('time-readout').textContent = tStr;
       document.getElementById('ui-clock').textContent = tStr;
@@ -1315,23 +1431,24 @@ void main() {
 
     document.getElementById('btn-export').addEventListener('click', () => {
       const btn = document.getElementById('btn-export');
-      btn.textContent = 'Rendering 1280 × 2856…';
+      const w = exportW, h = exportH;
+      btn.textContent = `Rendering ${w} × ${h}…`;
       requestAnimationFrame(() => {
         const off = document.createElement('canvas');
-        off.width = 1280;
-        off.height = 2856;
+        off.width = w;
+        off.height = h;
         const offGl = off.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
         const offProg = buildProg(offGl);
         const offLocs = Object.fromEntries(uniformNames.map(n => [n, offGl.getUniformLocation(offProg, n)]));
-        drawFrame(offGl, offProg, offLocs, 1280, 2856, 0.0, lastOrbital.angles);
+        drawFrame(offGl, offProg, offLocs, w, h, 0.0, lastOrbital.angles);
         offGl.finish();
         const a = document.createElement('a');
         const slug = currentLoc.name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
         const tTag = document.getElementById('time-readout').textContent.replace(':', '');
         a.href = off.toDataURL('image/png');
-        a.download = `falak_${slug}_${tTag}_1280x2856.png`;
+        a.download = `falak_${slug}_${tTag}_${w}x${h}.png`;
         a.click();
-        btn.textContent = 'Export Pixel 10 Pro PNG (1280 × 2856)';
+        btn.textContent = `Export Wallpaper PNG (${w} × ${h})`;
       });
     });
 
@@ -1339,7 +1456,7 @@ void main() {
       const rect = canvas.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
       const w = Math.max(128, Math.round(rect.width * dpr));
-      const h = Math.max(286, Math.round(rect.height * dpr));
+      const h = Math.max(160, Math.round(rect.height * dpr));
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
@@ -1370,6 +1487,7 @@ void main() {
       requestAnimationFrame(tick);
     }
 
+    applySelectedRatio();
     setMode('scrub');
     requestAnimationFrame(tick);
   </script>

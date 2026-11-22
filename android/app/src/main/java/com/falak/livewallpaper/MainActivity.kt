@@ -23,6 +23,7 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.BaseAdapter
@@ -184,11 +185,14 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                 topMargin = (8 * dp).toInt()
             }
         }
+        val screenWidthDp = resources.displayMetrics.widthPixels / dp
+        val prayerTextSp = (screenWidthDp / 34f).coerceIn(9.2f, 11.2f)
         for (i in 0 until 5) {
             val cell = TextView(this).apply {
                 gravity = Gravity.CENTER
+                maxLines = 2
                 setTextColor(0xB8DCE2F0.toInt())
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, prayerTextSp)
                 typeface = Typeface.MONOSPACE
                 setPadding((2 * dp).toInt(), (5 * dp).toInt(), (2 * dp).toInt(), (5 * dp).toInt())
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -254,18 +258,36 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         }
         dock.addView(applyButton)
 
+        val dockWidth = if (screenWidthDp > 480f) {
+            (460 * dp).toInt()
+        } else {
+            FrameLayout.LayoutParams.MATCH_PARENT
+        }
         val dockParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
+            dockWidth,
             FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.TOP
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL
         ).apply {
-            topMargin = (42 * dp).toInt()
+            topMargin = (38 * dp).toInt()
             leftMargin = (14 * dp).toInt()
             rightMargin = (14 * dp).toInt()
         }
         root.addView(dock, dockParams)
 
+        @Suppress("DEPRECATION")
+        root.setOnApplyWindowInsetsListener { _, insets ->
+            val topInset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                insets.getInsets(WindowInsets.Type.statusBars() or WindowInsets.Type.displayCutout()).top
+            } else {
+                insets.systemWindowInsetTop
+            }
+            dockParams.topMargin = topInset + (10 * dp).toInt()
+            dock.layoutParams = dockParams
+            insets
+        }
+
         setContentView(root)
+        root.requestApplyInsets()
 
         glThread = FalakGlThread(
             context = applicationContext,
@@ -680,7 +702,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             }
         }
         latCol.addView(fieldLabel(dp, "Latitude (-85..85)", topMarginDp = 0f))
-        val latInput = buildDarkEditText(dp, "31.9539").apply {
+        val latInput = buildDarkEditText(dp, "31.9500").apply {
             setText(initialLat)
             inputType = InputType.TYPE_CLASS_NUMBER or
                 InputType.TYPE_NUMBER_FLAG_DECIMAL or
@@ -695,7 +717,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             }
         }
         lonCol.addView(fieldLabel(dp, "Longitude (-180..180)", topMarginDp = 0f))
-        val lonInput = buildDarkEditText(dp, "35.9106").apply {
+        val lonInput = buildDarkEditText(dp, "35.9450").apply {
             setText(initialLon)
             inputType = InputType.TYPE_CLASS_NUMBER or
                 InputType.TYPE_NUMBER_FLAG_DECIMAL or

@@ -52,10 +52,11 @@ def hour_angle_for_alt(lat_rad: float, decl: float, alt_deg: float) -> float:
 
 
 def amman_prayers_hours(year: int, month: int, day: int, cfg: dict):
-    loc = cfg["location"]
+    loc = cfg["defaultLocation"]
+    method = cfg["calculationSources"][0]
     lat_r = math.radians(loc["latitudeDeg"])
     lon = loc["longitudeDeg"]
-    tz = loc["utcOffsetHours"]
+    tz = 3.0
     jd0 = julian_day(year, month, day) - lon / 360.0
 
     def calc(approx_h, fn):
@@ -63,17 +64,17 @@ def amman_prayers_hours(year: int, month: int, day: int, cfg: dict):
         noon = 12.0 + tz - lon / 15.0 - eqt
         return fn(noon, decl)
 
-    fajr = calc(5.0, lambda n, d: n - hour_angle_for_alt(lat_r, d, -loc["fajrAngleDeg"]))
+    fajr = calc(5.0, lambda n, d: n - hour_angle_for_alt(lat_r, d, -method["fajrAngleDeg"]))
     dhuhr = calc(12.3, lambda n, d: n)
     asr = calc(
         15.3,
         lambda n, d: n
         + hour_angle_for_alt(
-            lat_r, d, math.degrees(math.atan(1.0 / (loc["asrShadowFactor"] + math.tan(abs(lat_r - d)))))
+            lat_r, d, math.degrees(math.atan(1.0 / (method["asrShadowFactor"] + math.tan(abs(lat_r - d)))))
         ),
     )
-    maghrib = calc(17.5, lambda n, d: n + hour_angle_for_alt(lat_r, d, -0.8333))
-    isha = calc(19.0, lambda n, d: n + hour_angle_for_alt(lat_r, d, -loc["ishaAngleDeg"]))
+    maghrib = calc(17.5, lambda n, d: n + hour_angle_for_alt(lat_r, d, -method["maghribAngleDeg"]))
+    isha = calc(19.0, lambda n, d: n + hour_angle_for_alt(lat_r, d, -method["ishaAngleDeg"]))
     return [fajr, dhuhr, asr, maghrib, isha]
 
 
@@ -94,9 +95,9 @@ def main():
     asr_h = today[2]
     print(f"Amman Asr time: {int(asr_h):02d}:{int(round((asr_h % 1) * 60)):02d}")
 
-    # Render at 640x1428 (exact half of Pixel 10 Pro 1280x2856) and downsample cleanly to 320x714
-    rw, rh = 640, 1428
-    out_w, out_h = 320, 714
+    # Render at 640x1420 (supersampled 2x, 20:9 portrait) and downsample cleanly to 320x710 for README preview
+    rw, rh = 640, 1420
+    out_w, out_h = 320, 710
     n_frames = 96
     fps = 20
     duration_ms = int(round(1000 / fps))
@@ -158,7 +159,7 @@ gl.uniform1fv(u('uPlanetRadii'), new Float32Array(cfg.prayers.map(p => p.planetR
 gl.uniform1f(u('uPlanetDiffuse'), cfg.planetShading.diffuseStrength);
 gl.uniform1f(u('uTerminatorWrap'), cfg.planetShading.terminatorWrap);
 gl.uniform1f(u('uRimStrength'), cfg.planetShading.rimStrength);
-gl.uniform1f(u('uSunCoreR'), cfg.star.coreRadiusNorm);
+gl.uniform1f(u('uSunCoreR'), cfg.star.coreRadiusWidthNorm);
 gl.uniform1f(u('uSunGlow'), cfg.star.glowIntensity);
 gl.uniform1f(u('uGrainStrength'), 0.25);
 gl.uniform1f(u('uStarfieldStrength'), cfg.atmosphere.starfieldStrength);

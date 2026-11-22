@@ -1,13 +1,15 @@
 #version 300 es
 precision highp float;
 
-// Falak — Celestial Prayer-Time Orbital Shader (v1.0.1)
+// Falak — Celestial Prayer-Time Orbital Shader (v1.1.0)
 // Portable GLSL ES 3.00 (Android OpenGL ES 3.0 + WebGL2).
 //
-// Visual design:
-//   - Deep obsidian-grey sky (#0B0B0D -> #111214) with native-pixel razor-sharp starfield
+// Responsive design for any vertical phone screen size and aspect ratio (16:9 to 22:9+ & foldables),
+// optimized for LTPO OLED displays:
+//   - Deep obsidian-grey sky (#0B0B0D -> #111214) with resolution-aware razor-sharp starfield
 //     that gently sprinkles/sparkles when any prayer aligns at center meridian.
-//   - Half-screen-width incandescent ivory star rising 35% above the bottom edge with 1.5x glow.
+//   - Warm incandescent ivory star rising exactly 35% above the bottom edge with 1.5x glow,
+//     scaling proportionally across any vertical aspect ratio.
 //   - Strictly the 5 active prayer orbits (Fajr, Dhuhr, Asr, Maghrib, Isha) with vertical
 //     astrolabe meridian pips and localized orbital trails.
 //   - Five sculpted 3D spheres with subtle mineral shading and warm backlit limb crescents.
@@ -39,7 +41,7 @@ uniform float uTerminatorWrap;
 uniform float uRimStrength;
 
 // Bottom star
-uniform float uSunCoreR;       // 0.25 W => diameter = half phone screen width
+uniform float uSunCoreR;       // 0.25 W => diameter = half phone screen width (capped cleanly on wide ratios)
 uniform float uSunGlow;        // default 1.5
 
 // Deep space texture
@@ -129,8 +131,13 @@ float computePrayerActivity() {
     return prayerActivity;
 }
 
-// Single pixel-sharp procedural star layer (radii evaluated strictly in native physical pixels
-// with power-skewed per-star size variation matching real stellar magnitude distribution)
+// Responsive star radius (in viewport-height units) across any vertical aspect ratio
+float computeResponsiveStarRadiusH(float aspect) {
+    return clamp(max(uSunCoreR, 0.02) * aspect, 0.095, 0.132);
+}
+
+// Single pixel-sharp procedural star layer (radii scaled cleanly to display resolution
+// so stars maintain crisp pinpoint aesthetics across HD+, FHD+, QHD+, and foldable screens)
 vec3 evalStarLayer(
     vec2 aspectUv,
     float gridDensity,
@@ -141,6 +148,7 @@ vec3 evalStarLayer(
     float maxBright,
     vec2 seedOffset,
     float prayerFactor,
+    float pxScale,
     bool addGlint
 ) {
     vec2 grid = aspectUv * gridDensity;
@@ -158,7 +166,7 @@ vec3 evalStarLayer(
 
     // Power-skewed size & magnitude: most stars stay fine, occasional hero stars stand out crisply
     float sizeT = pow(max(rnd.y, 1e-5), 1.75);
-    float rPx = mix(minRadiusPx, maxRadiusPx, sizeT);
+    float rPx = max(0.45, mix(minRadiusPx, maxRadiusPx, sizeT) * pxScale);
 
     // Razor-sharp physical-pixel core + tight jewel-like Airy halo
     float core = exp(-pow(max(dPx / rPx, 1e-5), 2.15));
@@ -183,7 +191,7 @@ vec3 evalStarLayer(
     if (addGlint && prayerFactor > 0.02) {
         float glintPeak = prayerFactor * pow(max(wave, 1e-5), 4.0) * mix(0.45, 1.0, sizeT);
         float armLen = rPx * 3.8;
-        float armThick = max(0.55, rPx * 0.42);
+        float armThick = max(0.50, rPx * 0.42);
         float hArm = exp(-abs(deltaPx.x) / armLen) * exp(-pow(max(abs(deltaPx.y) / armThick, 1e-5), 2.0));
         float vArm = exp(-abs(deltaPx.y) / armLen) * exp(-pow(max(abs(deltaPx.x) / armThick, 1e-5), 2.0));
         intensity += (hArm + vArm) * 0.30 * baseBright * glintPeak;
@@ -194,24 +202,24 @@ vec3 evalStarLayer(
 }
 
 // Native-resolution varied-size sparse starfield with prayer-time celestial sprinkle
-vec3 evalStarfield(vec2 uv, float prayerFactor) {
+vec3 evalStarfield(vec2 uv, float prayerFactor, float aspect, float rCoreH, float pxScale) {
     if (uStarfieldStrength <= 0.001) return vec3(0.0);
 
-    // Fade gently into the bottom solar glow while filling the deep obsidian sky above
-    float skyMask = smoothstep(0.16, 0.46, uv.y);
+    // Fade gently above the bottom star corona while filling the deep obsidian sky
+    float skyMask = smoothstep(rCoreH * 1.4, rCoreH * 4.1, uv.y);
     if (skyMask <= 0.001) return vec3(0.0);
 
-    vec2 aspectUv = vec2(uv.x * (uResolution.x / uResolution.y), uv.y);
+    vec2 aspectUv = vec2(uv.x * aspect, uv.y);
     vec3 stars = vec3(0.0);
 
-    // Layer 1: sparse prominent hero stars (1.35..2.75 px crisp jewel cores + prayer-time glints)
-    stars += evalStarLayer(aspectUv, 18.0, 0.915, 1.35, 2.75, 0.34, 0.72, vec2(11.3, 29.1), prayerFactor, true);
+    // Layer 1: sparse prominent hero stars (crisp jewel cores + prayer-time glints)
+    stars += evalStarLayer(aspectUv, 18.0, 0.915, 1.35, 2.75, 0.34, 0.72, vec2(11.3, 29.1), prayerFactor, pxScale, true);
 
-    // Layer 2: sparse mid-magnitude stars (0.75..1.55 px sharp cores)
-    stars += evalStarLayer(aspectUv, 40.0, 0.935, 0.75, 1.55, 0.16, 0.42, vec2(71.9, 5.4), prayerFactor, false);
+    // Layer 2: sparse mid-magnitude stars
+    stars += evalStarLayer(aspectUv, 40.0, 0.935, 0.75, 1.55, 0.16, 0.42, vec2(71.9, 5.4), prayerFactor, pxScale, false);
 
-    // Layer 3: sparse fine cosmic dust pinpoints (0.48..0.95 px)
-    stars += evalStarLayer(aspectUv, 84.0, 0.950, 0.48, 0.95, 0.07, 0.21, vec2(43.7, 82.3), prayerFactor, false);
+    // Layer 3: sparse fine cosmic dust pinpoints
+    stars += evalStarLayer(aspectUv, 84.0, 0.950, 0.48, 0.95, 0.07, 0.21, vec2(43.7, 82.3), prayerFactor, pxScale, false);
 
     // Layer 4: prayer-time "sprinkle" — sparse varied-size diamond pinpoints that awaken
     // and gently twinkle across the dark sky exclusively during prayer alignment
@@ -224,7 +232,7 @@ vec3 evalStarfield(vec2 uv, float prayerFactor) {
             vec2 center = vec2(0.18) + 0.64 * hash22(cell + vec2(19.7, 61.2));
             float cellSizePx = uResolution.y / 58.0;
             float dPx = length((f - center) * cellSizePx);
-            float spRadius = mix(0.65, 1.55, pow(max(rnd.y, 1e-5), 1.6));
+            float spRadius = max(0.50, mix(0.65, 1.55, pow(max(rnd.y, 1e-5), 1.6)) * pxScale);
             float pin = exp(-pow(max(dPx / spRadius, 1e-5), 2.1));
 
             float phase = hash12(cell + vec2(5.9, 44.8)) * TAU;
@@ -410,7 +418,8 @@ vec4 evalPlanet(
     return vec4(rgb, alpha);
 }
 
-// Giant rising bottom star: exact 0.50 W core diameter (35% visible) + rich 1.5x atmospheric corona
+// Rising bottom star: responsive diameter (0.50 W on standard vertical phones, capped safely on wide ratios)
+// pinned so exactly 35% of the star disc rises above the bottom edge + rich 1.5x atmospheric corona
 vec3 evalSun(
     vec3 ro,
     vec3 sunPos,
@@ -419,6 +428,7 @@ vec3 evalSun(
     vec3 camRight,
     vec3 camUp,
     vec3 camFwd,
+    float rCoreH,
     float nearestPlanetAlpha,
     float nearestPlanetT
 ) {
@@ -427,39 +437,43 @@ vec3 evalSun(
     if (zSun <= 0.0) return vec3(0.0);
 
     vec2 sunNdc = vec2(dot(toSun, camRight), dot(toSun, camUp)) * (focal / zSun);
-    float aspect = uResolution.x / uResolution.y;
-    float rNorm = length(ndc - sunNdc) / aspect;
+    // Keep exact 35% rising fraction above bottom edge (ndc.y = -0.5) on any vertical aspect ratio
+    vec2 sunCenterNdc = vec2(sunNdc.x, -0.5 - 0.30 * rCoreH);
+    float rUnit = length(ndc - sunCenterNdc) / rCoreH;
 
-    float rCore = max(uSunCoreR, 0.02); // 0.25 W => exact 0.50 W diameter
-    float coreBody = 1.0 - smoothstep(rCore * 0.93, rCore * 1.03, rNorm);
-
-    float limbGrad = smoothstep(rCore * 0.55, rCore * 0.98, rNorm);
+    float coreBody = 1.0 - smoothstep(0.93, 1.03, rUnit);
+    float limbGrad = smoothstep(0.55, 0.98, rUnit);
     vec3 coreCol = mix(vec3(1.0, 0.995, 0.985), STAR_TINT, limbGrad);
 
-    float dEdge = max(rNorm - rCore, 0.0);
+    float dEdgeUnit = max(rUnit - 1.0, 0.0);
     // Glow intensity scales cleanly with uSunGlow (1.5x default) while keeping limb rolloff silky
     float glowScale = max(uSunGlow, 0.0);
     float spread = mix(1.0, 1.24, clamp(glowScale - 1.0, 0.0, 1.0));
-    float innerCorona = 0.56 * exp(-pow(max(dEdge / (rCore * 0.42 * spread), 1e-5), 1.22));
-    float outerBloom  = 0.24 * exp(-pow(max(dEdge / (rCore * 1.22 * spread), 1e-5), 1.78));
+    float innerCorona = 0.56 * exp(-pow(max(dEdgeUnit / (0.42 * spread), 1e-5), 1.22));
+    float outerBloom  = 0.24 * exp(-pow(max(dEdgeUnit / (1.22 * spread), 1e-5), 1.78));
 
     float eclipseMask = (nearestPlanetT < zSun) ? (1.0 - nearestPlanetAlpha) : 1.0;
     vec3 rawGlow = (STAR_TINT * innerCorona + CORONA_TINT * outerBloom) * glowScale;
-    // Soft filmic compression prevents hard white clipping beyond the 0.50 W limb at 1.5x glow
+    // Soft filmic compression prevents hard white clipping beyond the star limb at 1.5x glow
     vec3 glowCol = (1.0 - exp(-rawGlow * 1.28)) * mix(1.0, 0.35, 1.0 - eclipseMask);
 
     return max(coreCol * coreBody * 1.05 * eclipseMask, glowCol);
 }
 
 void main() {
-    float resScale = uResolution.y / 1024.0;
+    float safeH = max(uResolution.y, 1.0);
+    float aspect = uResolution.x / safeH;
+    float diagScale = sqrt(max(uResolution.x * safeH, 1.0));
+    float resScale = diagScale / 685.5;
+    float pxScale = clamp(diagScale / 1912.0, 0.50, 1.40);
+    float rCoreH = computeResponsiveStarRadiusH(aspect);
     float focal = 0.5 / tan(0.5 * uFovY);
 
     vec3 camRight, camUp, camFwd;
     buildCameraBasis(uCamYaw, uCamPitch, camRight, camUp, camFwd);
 
-    vec2 ndc = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;
-    vec2 pxStep = vec2(1.0 / uResolution.y);
+    vec2 ndc = (gl_FragCoord.xy - 0.5 * uResolution) / safeH;
+    vec2 pxStep = vec2(1.0 / safeH);
 
     vec3 rd   = getRayDir(ndc, focal, camRight, camUp, camFwd);
     vec3 rdDx = getRayDir(ndc + vec2(pxStep.x, 0.0), focal, camRight, camUp, camFwd);
@@ -468,9 +482,9 @@ void main() {
     vec3 sunPos = vec3(0.0);
     float prayerFactor = computePrayerActivity();
 
-    // 1. Deep obsidian-grey space gradient + razor-sharp pixel starfield (with prayer-time sprinkle)
+    // 1. Deep obsidian-grey space gradient + resolution-aware crisp starfield (with prayer-time sprinkle)
     vec3 col = mix(BG_HORIZON, BG_ZENITH, smoothstep(0.10, 0.85, vUv.y));
-    col += evalStarfield(vUv, prayerFactor);
+    col += evalStarfield(vUv, prayerFactor, aspect, rCoreH, pxScale);
 
     // 2. Five active prayer orbits + astrolabe meridian pips
     vec4 orbitEval = evalOrbitalPlane(uCamPos, rd, rdDx, rdDy, resScale);
@@ -509,8 +523,8 @@ void main() {
         col += orbitRgb;
     }
 
-    // 5. Giant warm-ivory bottom star (0.50 W core, 35% rising above bottom edge, 1.5x glow)
-    vec3 sunAdd = evalSun(uCamPos, sunPos, ndc, focal, camRight, camUp, camFwd, nearestPlanet.a, nearestT);
+    // 5. Responsive warm-ivory bottom star (exact 35% rising above bottom edge, 1.5x glow)
+    vec3 sunAdd = evalSun(uCamPos, sunPos, ndc, focal, camRight, camUp, camFwd, rCoreH, nearestPlanet.a, nearestT);
     col = clamp(col + sunAdd, 0.0, 1.0);
 
     // 6. Native 1x1 per-pixel micro-dither (eliminates OLED gradient banding with zero blocky grain)

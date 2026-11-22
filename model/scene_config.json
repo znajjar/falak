@@ -1,15 +1,14 @@
 {
   "name": "Falak",
   "version": "1.1.0",
-  "targetDevice": {
-    "model": "Google Pixel 10 Pro",
-    "displayType": "6.3-inch Super Actua LTPO OLED",
-    "widthPx": 1280,
-    "heightPx": 2856,
-    "aspectRatio": "20:9",
-    "exactRatio": 0.448179,
-    "ppi": 495,
-    "refreshRateHz": [1, 120]
+  "display": {
+    "orientation": "portrait",
+    "scaling": "Responsive across any vertical phone screen size, pixel density, and aspect ratio (16:9 through 22:9+ and portrait foldables)",
+    "optimizedFor": "LTPO OLED",
+    "refreshRateHz": [1, 120],
+    "idleRefreshHz": 1,
+    "prayerSprinkleFps": 30,
+    "hiddenRefreshHz": 0
   },
   "defaultLocation": {
     "city": "Amman",
@@ -47,10 +46,9 @@
   },
   "star": {
     "position": [0.0, 0.0, 0.0],
-    "screenYNormFromTop": 1.0336,
     "visibleFraction": 0.35,
-    "coreRadiusNorm": 0.25,
-    "coreDiameterNorm": 0.50,
+    "coreRadiusWidthNorm": 0.25,
+    "coreRadiusHeightClamp": [0.095, 0.132],
     "glowIntensity": 1.5
   },
   "orbits": {

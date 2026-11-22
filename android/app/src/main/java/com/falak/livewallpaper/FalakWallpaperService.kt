@@ -72,7 +72,7 @@ class FalakWallpaperService : WallpaperService() {
         }
 
         override fun onComputeColors(): WallpaperColors {
-            // Deep obsidian-grey Material You dark theme hints for Pixel lockscreen & launcher.
+            // Deep obsidian-grey Material You dark theme hints for Android lockscreen & launcher.
             val primary = Color.valueOf(0xFF0E0F12.toInt())
             val secondary = Color.valueOf(0xFF3E424D.toInt())
             val tertiary = Color.valueOf(0xFFFFF7E9.toInt())
