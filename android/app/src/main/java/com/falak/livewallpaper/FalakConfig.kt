@@ -27,16 +27,18 @@ data class FalakConfig(
     val terminatorWrap: Float = 0.72f,
     val rimStrength: Float = 0.14f,
 
-    // Half-screen-width rising bottom star (35% visible above bottom edge)
+    // Half-screen-width rising bottom star (35% visible above bottom edge) with 1.5x corona glow
     val sunCoreR: Float = 0.25f,
-    val sunGlow: Float = 1.0f,
+    val sunGlow: Float = 1.5f,
 
-    // Deep space grain & distant pinpoint starfield
-    val grainStrength: Float = 0.65f,
+    // Native 1x1 OLED micro-dither & razor-sharp pinpoint starfield
+    val grainStrength: Float = 0.55f,
     val starfieldStrength: Float = 1.0f,
 
-    // 1 Hz LTPO-friendly refresh while visible
-    val refreshIntervalMs: Long = 1000L
+    // Adaptive LTPO refresh: 1 Hz idle outside prayer time, smooth 30 FPS during prayer sprinkle
+    val refreshIntervalMs: Long = 1000L,
+    val prayerRefreshIntervalMs: Long = 33L,
+    val prayerSprinkleAngleRad: Float = 0.11f // ~25 min smooth anticipation + fade-out window
 ) {
     val camPitchRad: Float get() = (camPitchDeg * PI / 180.0).toFloat()
     val camYawRad: Float get() = (camYawDeg * PI / 180.0).toFloat()

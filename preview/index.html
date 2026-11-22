@@ -197,6 +197,7 @@ uniform float uGrainStrength;
 uniform float uStarfieldStrength;
 
 const float PI = 3.14159265359;
+const float TAU = 6.28318530718;
 
 const vec3 BG_ZENITH    = vec3(0.042, 0.044, 0.050);
 const vec3 BG_HORIZON   = vec3(0.068, 0.070, 0.078);
@@ -265,40 +266,97 @@ float filmGrain(vec2 fragCoord) {
     return (n1 + n2) - 1.0;
 }
 
-vec3 evalStarfield(vec2 uv, float resScale) {
+float computePrayerActivity() {
+    float prayerActivity = 0.0;
+    for (int i = 0; i < 5; i++) {
+        float a = abs(uPlanetAngles[i]);
+        prayerActivity = max(prayerActivity, exp(-pow(max(a / 0.046, 1e-5), 2.0)));
+    }
+    return prayerActivity;
+}
+
+vec3 evalStarLayer(
+    vec2 aspectUv,
+    float gridDensity,
+    float threshold,
+    float coreRadiusPx,
+    float minBright,
+    float maxBright,
+    vec2 seedOffset,
+    float prayerFactor,
+    bool addGlint
+) {
+    vec2 grid = aspectUv * gridDensity;
+    vec2 cell = floor(grid);
+    vec2 f = fract(grid);
+
+    vec2 rnd = hash22(cell + seedOffset);
+    if (rnd.x <= threshold) return vec3(0.0);
+
+    vec2 center = vec2(0.16) + 0.68 * hash22(cell + seedOffset * 1.73 + vec2(37.1, 19.4));
+    float cellSizePx = uResolution.y / gridDensity;
+    vec2 deltaPx = (f - center) * cellSizePx;
+    float dPx = length(deltaPx);
+
+    float core = exp(-pow(max(dPx / coreRadiusPx, 1e-5), 2.0));
+    float microHalo = 0.14 * exp(-pow(max(dPx / (coreRadiusPx * 2.4), 1e-5), 2.0));
+    float baseBright = mix(minBright, maxBright, rnd.y);
+
+    float spec = hash12(cell + seedOffset * 0.51);
+    vec3 tint = mix(vec3(0.82, 0.88, 1.0), vec3(1.0, 0.95, 0.86), spec);
+
+    float phase = hash12(cell + seedOffset * 2.31) * TAU;
+    float freq = mix(1.35, 3.15, fract(rnd.y * 7.13));
+    float wave = 0.5 + 0.5 * sin(uTime * freq + phase);
+    float sparkle = pow(max(wave, 1e-5), 2.6);
+    float shimmer = mix(1.0, 0.72 + 1.05 * sparkle, prayerFactor);
+
+    float intensity = (core + microHalo) * baseBright * shimmer;
+
+    if (addGlint && prayerFactor > 0.02) {
+        float glintPeak = prayerFactor * pow(max(wave, 1e-5), 4.0);
+        float armLen = coreRadiusPx * 4.2;
+        float armThick = max(0.55, coreRadiusPx * 0.55);
+        float hArm = exp(-abs(deltaPx.x) / armLen) * exp(-pow(max(abs(deltaPx.y) / armThick, 1e-5), 2.0));
+        float vArm = exp(-abs(deltaPx.y) / armLen) * exp(-pow(max(abs(deltaPx.x) / armThick, 1e-5), 2.0));
+        intensity += (hArm + vArm) * 0.28 * baseBright * glintPeak;
+        tint = mix(tint, ACTIVE_TINT, 0.45 * glintPeak);
+    }
+
+    return tint * intensity;
+}
+
+vec3 evalStarfield(vec2 uv, float prayerFactor) {
     if (uStarfieldStrength <= 0.001) return vec3(0.0);
-    float skyMask = smoothstep(0.18, 0.52, uv.y);
+    float skyMask = smoothstep(0.16, 0.46, uv.y);
     if (skyMask <= 0.001) return vec3(0.0);
 
     vec2 aspectUv = vec2(uv.x * (uResolution.x / uResolution.y), uv.y);
     vec3 stars = vec3(0.0);
 
-    {
-        vec2 grid = aspectUv * 26.0;
+    stars += evalStarLayer(aspectUv, 26.0, 0.87, 1.15, 0.22, 0.52, vec2(11.3, 29.1), prayerFactor, true);
+    stars += evalStarLayer(aspectUv, 54.0, 0.89, 0.85, 0.12, 0.34, vec2(71.9, 5.4), prayerFactor, false);
+    stars += evalStarLayer(aspectUv, 98.0, 0.90, 0.65, 0.07, 0.20, vec2(43.7, 82.3), prayerFactor, false);
+
+    if (prayerFactor > 0.01) {
+        vec2 grid = aspectUv * 72.0;
         vec2 cell = floor(grid);
         vec2 f = fract(grid);
-        vec2 rnd = hash22(cell + vec2(11.3, 29.1));
-        if (rnd.x > 0.89) {
-            vec2 center = vec2(0.18) + 0.64 * hash22(cell + vec2(47.2, 13.7));
-            float d = length(f - center);
-            float core = exp(-pow(max(d / 0.048, 1e-5), 2.0));
-            float brightness = mix(0.10, 0.28, rnd.y);
-            vec3 tint = mix(vec3(0.84, 0.89, 1.0), vec3(1.0, 0.95, 0.88), hash12(cell));
-            stars += tint * core * brightness;
+        vec2 rnd = hash22(cell + vec2(93.1, 17.6));
+        if (rnd.x > 0.82) {
+            vec2 center = vec2(0.16) + 0.68 * hash22(cell + vec2(19.7, 61.2));
+            float cellSizePx = uResolution.y / 72.0;
+            float dPx = length((f - center) * cellSizePx);
+            float pin = exp(-pow(max(dPx / 0.85, 1e-5), 2.0));
+
+            float phase = hash12(cell + vec2(5.9, 44.8)) * TAU;
+            float freq = mix(1.9, 4.4, rnd.y);
+            float pulse = pow(max(0.5 + 0.5 * sin(uTime * freq + phase), 1e-5), 5.0);
+            vec3 spTint = mix(vec3(0.90, 0.93, 1.0), ACTIVE_TINT, 0.65);
+            stars += spTint * pin * pulse * 0.62 * prayerFactor;
         }
     }
-    {
-        vec2 grid = aspectUv * 54.0;
-        vec2 cell = floor(grid);
-        vec2 f = fract(grid);
-        vec2 rnd = hash22(cell + vec2(71.9, 5.4));
-        if (rnd.x > 0.91) {
-            vec2 center = vec2(0.15) + 0.70 * hash22(cell + vec2(3.1, 88.6));
-            float d = length(f - center);
-            float core = exp(-pow(max(d / 0.055, 1e-5), 2.0));
-            stars += vec3(0.82, 0.85, 0.92) * core * mix(0.05, 0.14, rnd.y);
-        }
-    }
+
     return stars * skyMask * uStarfieldStrength;
 }
 
@@ -471,17 +529,21 @@ vec3 evalSun(vec3 ro, vec3 sunPos, vec2 ndc, float focal, vec3 camRight, vec3 ca
     float rNorm = length(ndc - sunNdc) / aspect;
 
     float rCore = max(uSunCoreR, 0.02);
-    float coreBody = 1.0 - smoothstep(rCore * 0.92, rCore * 1.04, rNorm);
+    float coreBody = 1.0 - smoothstep(rCore * 0.93, rCore * 1.03, rNorm);
 
     float limbGrad = smoothstep(rCore * 0.55, rCore * 0.98, rNorm);
     vec3 coreCol = mix(vec3(1.0, 0.995, 0.985), STAR_TINT, limbGrad);
 
     float dEdge = max(rNorm - rCore, 0.0);
-    float innerCorona = 0.56 * exp(-pow(max(dEdge / (rCore * 0.36), 1e-5), 1.25));
-    float outerBloom  = 0.22 * exp(-pow(max(dEdge / (rCore * 1.08), 1e-5), 1.85));
+    float glowScale = max(uSunGlow, 0.0);
+    float spread = mix(1.0, 1.24, clamp(glowScale - 1.0, 0.0, 1.0));
+    float innerCorona = 0.56 * exp(-pow(max(dEdge / (rCore * 0.42 * spread), 1e-5), 1.22));
+    float outerBloom  = 0.24 * exp(-pow(max(dEdge / (rCore * 1.22 * spread), 1e-5), 1.78));
 
     float eclipseMask = (nearestPlanetT < zSun) ? (1.0 - nearestPlanetAlpha) : 1.0;
-    vec3 glowCol = (STAR_TINT * innerCorona + CORONA_TINT * outerBloom) * uSunGlow * mix(1.0, 0.35, 1.0 - eclipseMask);
+    vec3 rawGlow = (STAR_TINT * innerCorona + CORONA_TINT * outerBloom) * glowScale;
+    vec3 glowCol = (1.0 - exp(-rawGlow * 1.28)) * mix(1.0, 0.35, 1.0 - eclipseMask);
+
     return max(coreCol * coreBody * 1.05 * eclipseMask, glowCol);
 }
 
@@ -500,8 +562,10 @@ void main() {
     vec3 rdDy = getRayDir(ndc + vec2(0.0, pxStep.y), focal, camRight, camUp, camFwd);
 
     vec3 sunPos = vec3(0.0);
+    float prayerFactor = computePrayerActivity();
+
     vec3 col = mix(BG_HORIZON, BG_ZENITH, smoothstep(0.10, 0.85, vUv.y));
-    col += evalStarfield(vUv, resScale);
+    col += evalStarfield(vUv, prayerFactor);
 
     vec4 orbitEval = evalOrbitalPlane(uCamPos, rd, rdDx, rdDy, resScale);
     vec3 orbitRgb = orbitEval.rgb;
@@ -538,8 +602,7 @@ void main() {
     vec3 sunAdd = evalSun(uCamPos, sunPos, ndc, focal, camRight, camUp, camFwd, nearestPlanet.a, nearestT);
     col = clamp(col + sunAdd, 0.0, 1.0);
 
-    vec2 grainCoord = floor(gl_FragCoord.xy / max(1.0, resScale * 0.65));
-    float grain = filmGrain(grainCoord) * 0.0105 * uGrainStrength;
+    float grain = filmGrain(gl_FragCoord.xy) * 0.0045 * uGrainStrength;
     col = clamp(col + vec3(grain), 0.0, 1.0);
 
     fragColor = vec4(col, 1.0);
@@ -852,8 +915,8 @@ void main() {
       ctx.uniform1f(locations.uRimStrength, 0.14);
 
       ctx.uniform1f(locations.uSunCoreR, 0.25);
-      ctx.uniform1f(locations.uSunGlow, 1.0);
-      ctx.uniform1f(locations.uGrainStrength, 0.65);
+      ctx.uniform1f(locations.uSunGlow, 1.5);
+      ctx.uniform1f(locations.uGrainStrength, 0.55);
       ctx.uniform1f(locations.uStarfieldStrength, visual.starfieldStrength);
 
       ctx.drawArrays(ctx.TRIANGLES, 0, 3);

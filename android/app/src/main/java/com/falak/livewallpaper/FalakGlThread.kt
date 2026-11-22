@@ -31,6 +31,7 @@ class FalakGlThread(
     private var height = 0
     private var immediateFrames = 0
     private var lastDrawMs = 0L
+    private var prayerSprinkleActive = false
 
     private var eglDisplay: EGLDisplay = EGL14.EGL_NO_DISPLAY
     private var eglContext: EGLContext = EGL14.EGL_NO_CONTEXT
@@ -130,7 +131,12 @@ class FalakGlThread(
 
                         val nowMs = SystemClock.uptimeMillis()
                         val elapsed = nowMs - lastDrawMs
-                        val waitMs = config.refreshIntervalMs - elapsed
+                        val interval = if (prayerSprinkleActive) {
+                            config.prayerRefreshIntervalMs
+                        } else {
+                            config.refreshIntervalMs
+                        }
+                        val waitMs = interval - elapsed
                         if (waitMs <= 0L) {
                             break
                         }
@@ -187,6 +193,10 @@ class FalakGlThread(
                     lastDrawMs = nowMs
                     val elapsedSec = (nowMs - startMs) * 0.001f
                     val angles = angleProvider()
+                    val isNearPrayer = angles.any { kotlin.math.abs(it) < config.prayerSprinkleAngleRad }
+                    synchronized(lock) {
+                        prayerSprinkleActive = isNearPrayer
+                    }
                     renderer?.draw(w, h, elapsedSec, angles)
                     if (!EGL14.eglSwapBuffers(eglDisplay, eglSurface)) {
                         val err = EGL14.eglGetError()

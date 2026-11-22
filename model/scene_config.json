@@ -1,6 +1,6 @@
 {
   "name": "Falak",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "targetDevice": {
     "model": "Google Pixel 10 Pro",
     "displayType": "6.3-inch Super Actua LTPO OLED",
@@ -35,7 +35,7 @@
     "visibleFraction": 0.35,
     "coreRadiusNorm": 0.25,
     "coreDiameterNorm": 0.50,
-    "glowIntensity": 1.0
+    "glowIntensity": 1.5
   },
   "orbits": {
     "count": 5,
@@ -61,7 +61,7 @@
     "rimStrength": 0.14
   },
   "atmosphere": {
-    "grainStrength": 0.65,
+    "grainStrength": 0.55,
     "starfieldStrength": 1.0
   }
 }
