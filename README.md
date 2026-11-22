@@ -18,7 +18,7 @@ An original OpenGL ES 3.0 Android live wallpaper that scales cleanly to **any ve
 - **Continuous ~24h Orbits Anywhere on Earth**: Powered by an offline Jean Meeus / NOAA astronomical solar solver with full IANA timezone/DST support and continuous angle-based high-latitude twilight handling. Each planet interpolates continuously across consecutive days—adapting smoothly with zero midnight jump—and crosses dead center at exact prayer time.
 - **Rising Star**: A warm incandescent ivory star rises `35%` above the bottom edge of the screen with a lush `1.5×` corona glow against a deep obsidian-grey sky (`#0B0B0D` → `#111214`).
 - **Resolution-Aware Starfield & Prayer-Time Sprinkle**: Sparse, varied-size pinpoint stars scaled to display resolution with `1×1` OLED micro-dither to eliminate dark-grey banding. Around each prayer time, the starfield softly sprinkles with twinkling diamond pinpoints and micro-glints.
-- **Five Active Prayer Orbits**: Only the five prayer orbits (**Fajr**, **Dhuhr**, **Asr**, **Maghrib**, **Isha**) arc upward across the screen, intersected by a delicate vertical meridian axis, alignment pips, and localized orbital trails.
+- **Five Active Prayer Orbits**: Only the five prayer orbits (**Fajr**, **Dhuhr**, **Asr**, **Maghrib**, **Isha**) arc upward across the screen, marked with subtle center alignment dots and localized orbital trails.
 - **Optimized for LTPO OLED**: Renders at `1 Hz` while idle, ramps smoothly to `30 FPS` during prayer-time sprinkle windows, and sleeps at `0 Hz` when hidden or screen-off.
 
 ## Project Layout

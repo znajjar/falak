@@ -10,8 +10,8 @@ precision highp float;
 //     that gently sprinkles/sparkles when any prayer aligns at center meridian.
 //   - Warm incandescent ivory star rising exactly 35% above the bottom edge with 1.5x glow,
 //     scaling proportionally across any vertical aspect ratio.
-//   - Strictly the 5 active prayer orbits (Fajr, Dhuhr, Asr, Maghrib, Isha) with vertical
-//     astrolabe meridian pips and localized orbital trails.
+//   - Strictly the 5 active prayer orbits (Fajr, Dhuhr, Asr, Maghrib, Isha) with center
+//     alignment dots and localized orbital trails.
 //   - Five sculpted 3D spheres with subtle mineral shading and warm backlit limb crescents.
 
 in vec2 vUv;
@@ -295,16 +295,6 @@ vec4 evalOrbitalPlane(vec3 ro, vec3 rd, vec3 rdDx, vec3 rdDy, float resScale) {
     float edgeAtten = 1.0 - 0.36 * smoothstep(0.14, 1.04, screenX);
 
     vec3 accum = vec3(0.0);
-
-    float rMin = uPlanetOrbitR[0] - 0.8;
-    float rMax = uPlanetOrbitR[4] + 0.8;
-    if (r >= rMin && r <= rMax) {
-        float pxMeridian = abs(hit.x) / dxPerPx;
-        float mLine = 1.0 - smoothstep(0.35 * resScale, 1.15 * resScale, pxMeridian);
-        float dash = smoothstep(0.30, 0.65, sin(r * 11.0) * 0.5 + 0.5);
-        float mFade = smoothstep(rMin, rMin + 1.2, r) * (1.0 - smoothstep(rMax - 1.2, rMax, r));
-        accum += ORBIT_TINT * (mLine * dash * mFade * 0.055 * uRingBrightness);
-    }
 
     for (int i = 0; i < 5; i++) {
         float targetR = uPlanetOrbitR[i];
