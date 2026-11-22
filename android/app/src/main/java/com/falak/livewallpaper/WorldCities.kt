@@ -10,8 +10,8 @@ object WorldCities {
         id = "amman",
         name = "Amman",
         country = "Jordan",
-        latitudeDeg = 31.9539,
-        longitudeDeg = 35.9106,
+        latitudeDeg = 31.9500,
+        longitudeDeg = 35.9450,
         zoneId = "Asia/Amman"
     )
 

@@ -14,8 +14,8 @@
   "defaultLocation": {
     "city": "Amman",
     "country": "Jordan",
-    "latitudeDeg": 31.9539,
-    "longitudeDeg": 35.9106,
+    "latitudeDeg": 31.9500,
+    "longitudeDeg": 35.9450,
     "timezone": "Asia/Amman",
     "manualOnly": true
   },
@@ -24,15 +24,19 @@
       "id": "JORDAN_AWQAF",
       "name": "Jordan Ministry of Awqaf",
       "fajrAngleDeg": 18.0,
+      "maghribAngleDeg": 2.12,
       "ishaAngleDeg": 18.0,
-      "asrShadowFactor": 1.0
+      "asrShadowFactor": 1.0,
+      "roundUpDhuhrAsrIsha": true
     },
     {
       "id": "MWL",
       "name": "Muslim World League (MWL)",
       "fajrAngleDeg": 18.0,
+      "maghribAngleDeg": 0.8333,
       "ishaAngleDeg": 17.0,
-      "asrShadowFactor": 1.0
+      "asrShadowFactor": 1.0,
+      "roundUpDhuhrAsrIsha": false
     }
   ],
   "camera": {

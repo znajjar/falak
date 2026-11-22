@@ -96,7 +96,7 @@
           <div class="space-y-1">
             <div class="flex items-center justify-between">
               <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Calculation Source</h2>
-              <span id="source-angles" class="text-xs font-mono text-[var(--muted-foreground)]">18° / 18°</span>
+              <span id="source-angles" class="text-xs font-mono text-[var(--muted-foreground)]">18° / 2.12° / 18°</span>
             </div>
             <div class="grid grid-cols-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5 text-xs gap-0.5" role="group">
               <button id="src-awqaf" class="px-2 py-1.5 rounded-md font-medium bg-[var(--primary)] text-[var(--primary-foreground)] transition-colors truncate">
@@ -131,11 +131,11 @@
                 </label>
                 <label class="block">
                   <span class="text-[var(--muted-foreground)] block mb-0.5">Latitude</span>
-                  <input id="custom-lat" type="number" step="0.0001" min="-85" max="85" value="31.9539" class="w-full font-mono bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded px-2 py-1" />
+                  <input id="custom-lat" type="number" step="0.0001" min="-85" max="85" value="31.9500" class="w-full font-mono bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded px-2 py-1" />
                 </label>
                 <label class="block">
                   <span class="text-[var(--muted-foreground)] block mb-0.5">Longitude</span>
-                  <input id="custom-lon" type="number" step="0.0001" min="-180" max="180" value="35.9106" class="w-full font-mono bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded px-2 py-1" />
+                  <input id="custom-lon" type="number" step="0.0001" min="-180" max="180" value="35.9450" class="w-full font-mono bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded px-2 py-1" />
                 </label>
               </div>
               <button id="apply-custom" class="w-full py-1 px-2 rounded-md border border-[var(--border)] bg-[var(--card)] text-xs font-medium text-[var(--foreground)] hover:opacity-90">
@@ -679,21 +679,25 @@ void main() {
         name: 'Jordan Ministry of Awqaf',
         shortName: 'Jordan Awqaf',
         fajrDeg: 18.0,
+        maghribDeg: 2.12,
         ishaDeg: 18.0,
         asrShadow: 1.0,
+        roundUpDhuhrAsrIsha: true,
       },
       MWL: {
         id: 'MWL',
         name: 'Muslim World League (MWL)',
         shortName: 'MWL',
         fajrDeg: 18.0,
+        maghribDeg: 0.8333,
         ishaDeg: 17.0,
         asrShadow: 1.0,
+        roundUpDhuhrAsrIsha: false,
       },
     };
 
     const WORLD_CITIES = [
-      { id: 'amman', name: 'Amman', country: 'Jordan', lat: 31.9539, lon: 35.9106, zone: 'Asia/Amman' },
+      { id: 'amman', name: 'Amman', country: 'Jordan', lat: 31.9500, lon: 35.9450, zone: 'Asia/Amman' },
       { id: 'irbid', name: 'Irbid', country: 'Jordan', lat: 32.5568, lon: 35.8469, zone: 'Asia/Amman' },
       { id: 'aqaba', name: 'Aqaba', country: 'Jordan', lat: 29.5321, lon: 35.0063, zone: 'Asia/Amman' },
       { id: 'jerusalem', name: 'Jerusalem', country: 'Palestine', lat: 31.7683, lon: 35.2137, zone: 'Asia/Jerusalem' },
@@ -809,18 +813,29 @@ void main() {
     }
 
     function sunPosition(jd) {
-      const D = jd - 2451545.0;
+      const T = (jd - 2451545.0) / 36525.0;
       const deg = Math.PI / 180.0;
-      const g = (((357.529 + 0.98560028 * D) % 360) + 360) % 360 * deg;
-      const q = (((280.459 + 0.98564736 * D) % 360) + 360) % 360;
-      const L = (((q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) % 360) + 360) % 360 * deg;
-      const e = (23.439 - 0.00000036 * D) * deg;
-      let ra = (Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)) * 180 / Math.PI) / 15.0;
-      ra = ((ra % 24) + 24) % 24;
-      const decl = Math.asin(Math.sin(e) * Math.sin(L));
-      let eqt = q / 15.0 - ra;
-      if (eqt > 12) eqt -= 24;
-      if (eqt < -12) eqt += 24;
+      const L0 = (((280.46646 + T * (36000.76983 + 0.0003032 * T)) % 360) + 360) % 360;
+      const M = (((357.52911 + T * (35999.05029 - 0.0001537 * T)) % 360) + 360) % 360;
+      const ecc = 0.016708634 - T * (0.000042037 + 0.0000001267 * T);
+      const mRad = M * deg;
+      const C = Math.sin(mRad) * (1.914602 - T * (0.004817 + 0.000014 * T))
+        + Math.sin(2 * mRad) * (0.019993 - 0.000101 * T)
+        + Math.sin(3 * mRad) * 0.000289;
+      const trueLong = L0 + C;
+      const omega = (125.04 - 1934.136 * T) * deg;
+      const appLong = (trueLong - 0.00569 - 0.00478 * Math.sin(omega)) * deg;
+      const eps0 = 23.0 + (26.0 + (21.448 - T * (46.815 + T * (0.00059 - T * 0.001813))) / 60.0) / 60.0;
+      const eps = (eps0 + 0.00256 * Math.cos(omega)) * deg;
+      const decl = Math.asin(Math.sin(eps) * Math.sin(appLong));
+      const y = Math.tan(eps * 0.5) ** 2;
+      const l0Rad = L0 * deg;
+      const eqtRad = y * Math.sin(2 * l0Rad)
+        - 2 * ecc * Math.sin(mRad)
+        + 4 * ecc * y * Math.sin(mRad) * Math.cos(2 * l0Rad)
+        - 0.5 * y * y * Math.sin(4 * l0Rad)
+        - 1.25 * ecc * ecc * Math.sin(2 * mRad);
+      const eqt = (eqtRad * 180 / Math.PI) / 15.0;
       return { decl, eqt };
     }
 
@@ -865,9 +880,24 @@ void main() {
       const ss = utcNoonAt(dhuhrUtc + 6.0);
       const ssCos = rawCosHourAngle(latRad, ss.decl, -0.8333);
       const ssHa = ssCos < -1 ? 11.5 : ssCos > 1 ? 0.5 : (Math.acos(ssCos) * 180 / Math.PI) / 15.0;
-      const maghribUtc = ss.noonUtc + ssHa;
+      const sunsetUtc = ss.noonUtc + ssHa;
 
-      const nightHours = Math.max(1.0, Math.min(23.0, 24.0 - (maghribUtc - sunriseUtc)));
+      const nightHours = Math.max(1.0, Math.min(23.0, 24.0 - (sunsetUtc - sunriseUtc)));
+
+      let maghribUtc;
+      if (Math.abs(method.maghribDeg - 0.8333) < 1e-4) {
+        maghribUtc = sunsetUtc;
+      } else {
+        const mEval = utcNoonAt(sunsetUtc + 0.1);
+        const mCos = rawCosHourAngle(latRad, mEval.decl, -method.maghribDeg);
+        const maxMag = nightHours * (method.maghribDeg / 60.0);
+        if (mCos >= -1 && mCos <= 1 && ssCos <= 1) {
+          const astroMag = mEval.noonUtc + (Math.acos(mCos) * 180 / Math.PI) / 15.0;
+          maghribUtc = (astroMag - sunsetUtc > maxMag && Math.abs(lat) > 45.0) ? (sunsetUtc + maxMag) : astroMag;
+        } else {
+          maghribUtc = sunsetUtc + Math.min(0.25, maxMag);
+        }
+      }
 
       const f = utcNoonAt(sunriseUtc - 1.5);
       const fCos = rawCosHourAngle(latRad, f.decl, -method.fajrDeg);
@@ -900,14 +930,19 @@ void main() {
       let ishaUtc;
       if (iCos >= -1 && iCos <= 1) {
         const astro = ishaEval.noonUtc + (Math.acos(iCos) * 180 / Math.PI) / 15.0;
-        ishaUtc = (astro - maghribUtc > maxIsha && Math.abs(lat) > 45.0) ? (maghribUtc + maxIsha) : astro;
+        ishaUtc = (astro - sunsetUtc > maxIsha && Math.abs(lat) > 45.0) ? (sunsetUtc + maxIsha) : astro;
       } else {
-        ishaUtc = maghribUtc + maxIsha;
+        ishaUtc = sunsetUtc + maxIsha;
       }
       ishaUtc = Math.max(ishaUtc, maghribUtc + 0.05);
 
       const utcHours = [fajrUtc, dhuhrUtc, asrUtc, maghribUtc, ishaUtc];
-      return utcHours.map(h => Math.round(utcMidnightMs + h * 3_600_000.0));
+      return utcHours.map((h, idx) => {
+        const rawMin = (utcMidnightMs + h * 3_600_000.0) / 60_000.0;
+        const roundUp = method.roundUpDhuhrAsrIsha && (idx === 1 || idx === 2 || idx === 4);
+        const roundedMin = roundUp ? Math.ceil(rawMin) : Math.floor(rawMin + 0.5);
+        return roundedMin * 60_000;
+      });
     }
 
     function fmtInstant(epochMs, zone) {
@@ -1095,7 +1130,10 @@ void main() {
       currentMethod = METHODS[methodKey];
       btnAwqaf.className = methodKey === 'JORDAN_AWQAF' ? segActive : segIdle;
       btnMwl.className = methodKey === 'MWL' ? segActive : segIdle;
-      document.getElementById('source-angles').textContent = `${currentMethod.fajrDeg}° / ${currentMethod.ishaDeg}°`;
+      document.getElementById('source-angles').textContent =
+        methodKey === 'JORDAN_AWQAF'
+          ? `${currentMethod.fajrDeg}° / ${currentMethod.maghribDeg}° / ${currentMethod.ishaDeg}°`
+          : `${currentMethod.fajrDeg}° / ${currentMethod.ishaDeg}°`;
       refreshUI();
     }
 
