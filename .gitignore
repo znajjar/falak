@@ -3,7 +3,6 @@ android/.gradle/
 android/local.properties
 android/app/build/
 android/build/
-dist/*.apk
 *.iml
 .idea/
 .DS_Store
