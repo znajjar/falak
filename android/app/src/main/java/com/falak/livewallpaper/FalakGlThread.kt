@@ -17,7 +17,10 @@ import android.view.SurfaceHolder
 class FalakGlThread(
     private val context: Context,
     private val config: FalakConfig = FalakConfig(),
-    private val angleProvider: () -> FloatArray = { AmmanPrayerTimes.computeState().anglesRad }
+    private val angleProvider: () -> FloatArray = {
+        val settings = FalakPreferences.load(context)
+        PrayerTimesEngine.computeState(settings.location, settings.method).anglesRad
+    }
 ) : Thread("FalakGLThread") {
 
     private val lock = Object()

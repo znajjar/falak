@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Falak — Celestial Prayer-Time Wallpaper (Pixel 10 Pro)</title>
+  <title>Falak — Worldwide Celestial Prayer Wallpaper (Pixel 10 Pro)</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     .phone-frame {
@@ -23,15 +23,15 @@
     <header class="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-[var(--border)]">
       <div>
         <h1 class="text-base font-semibold tracking-tight text-[var(--foreground)]">
-          Falak — Amman Prayer Times
+          Falak — Worldwide Prayer Orbits
         </h1>
-        <p class="text-xs text-[var(--muted-foreground)] mt-0.5">
-          Pixel 10 Pro · 1280 × 2856 (20:9) · Amman (31.95°N, 35.91°E · UTC+3 · Awqaf 18°/18°)
+        <p id="header-meta" class="text-xs text-[var(--muted-foreground)] mt-0.5 font-mono">
+          Pixel 10 Pro · 1280 × 2856 · Amman, Jordan (31.95°N, 35.91°E · UTC+3) · Jordan Awqaf
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <div class="inline-flex rounded-lg border border-[var(--border)] bg-[var(--card)] p-0.5 text-xs" role="group">
-          <button id="mode-live" class="px-2.5 py-1 rounded-md font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">Live Amman</button>
+          <button id="mode-live" class="px-2.5 py-1 rounded-md font-medium bg-[var(--primary)] text-[var(--primary-foreground)] transition-colors">Live</button>
           <button id="mode-timelapse" class="px-2.5 py-1 rounded-md font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">24h Timelapse</button>
         </div>
         <button id="toggle-labels" class="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs font-medium text-[var(--foreground)] hover:opacity-90">
@@ -44,7 +44,7 @@
     </header>
 
     <!-- Main workspace -->
-    <main class="grid grid-cols-1 md:grid-cols-[minmax(280px,1fr)_356px] gap-4 items-start">
+    <main class="grid grid-cols-1 md:grid-cols-[minmax(280px,1fr)_372px] gap-4 items-start">
 
       <!-- Left: Pixel 10 Pro Live Viewport -->
       <section class="flex flex-col items-center justify-center gap-2.5">
@@ -65,13 +65,13 @@
             <div id="pixel-overlay" class="hidden pointer-events-none absolute inset-0 flex flex-col justify-between p-4 text-white/75">
               <div class="flex flex-col items-center">
                 <div class="w-full flex items-center justify-between px-2 pt-0.5 text-xs font-medium tracking-tight opacity-80">
-                  <span id="ui-status-time">17:34</span>
+                  <span id="ui-status-time">15:14</span>
                   <div class="w-3.5 h-3.5 rounded-full bg-black/90 ring-1 ring-white/15"></div>
                   <span>5G · 94%</span>
                 </div>
                 <div class="mt-4 text-center">
-                  <div id="ui-date" class="text-xs uppercase tracking-widest opacity-70">Sat, Nov 21</div>
-                  <div id="ui-clock" class="text-4xl font-light tracking-tight leading-none mt-1 opacity-85 tabular-nums">17:34</div>
+                  <div id="ui-date" class="text-xs uppercase tracking-widest opacity-70">Sun, Nov 22</div>
+                  <div id="ui-clock" class="text-4xl font-light tracking-tight leading-none mt-1 opacity-85 tabular-nums">15:14</div>
                 </div>
               </div>
               <div class="flex flex-col items-center pb-0.5">
@@ -81,28 +81,85 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-3 text-xs text-[var(--muted-foreground)] font-mono tabular-nums">
-          <span id="footer-time">Amman 17:34 (UTC+3)</span>
+        <div class="flex flex-wrap items-center justify-center gap-2 text-xs text-[var(--muted-foreground)] font-mono tabular-nums">
+          <span id="footer-time">Amman 15:14 (UTC+3)</span>
           <span>·</span>
-          <span id="footer-next">Next: Isha in 1h 25m</span>
+          <span id="footer-next">Next: Maghrib in 1h 20m</span>
         </div>
       </section>
 
-      <!-- Right: Amman Prayer Controls & Scene Tuning -->
+      <!-- Right: Worldwide Controls, Source Selector & Scene Tuning -->
       <aside class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 flex flex-col gap-3">
 
+        <!-- Source & Manual Location Selector -->
+        <div class="space-y-2.5">
+          <div class="space-y-1">
+            <div class="flex items-center justify-between">
+              <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Calculation Source</h2>
+              <span id="source-angles" class="text-xs font-mono text-[var(--muted-foreground)]">18° / 18°</span>
+            </div>
+            <div class="grid grid-cols-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5 text-xs gap-0.5" role="group">
+              <button id="src-awqaf" class="px-2 py-1.5 rounded-md font-medium bg-[var(--primary)] text-[var(--primary-foreground)] transition-colors truncate">
+                Jordan Awqaf
+              </button>
+              <button id="src-mwl" class="px-2 py-1.5 rounded-md font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors truncate">
+                MWL
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Manual Location</h2>
+              <span class="text-xs text-[var(--muted-foreground)]">No GPS required</span>
+            </div>
+            <div class="flex gap-1.5">
+              <input id="city-search" type="text" placeholder="Filter cities…" class="w-28 text-xs bg-[var(--background)] text-[var(--foreground)] border border-[var(--border)] rounded-lg px-2 py-1.5 outline-none" />
+              <select id="city-select" class="flex-1 min-w-0 text-xs bg-[var(--background)] text-[var(--foreground)] border border-[var(--border)] rounded-lg px-2 py-1.5 outline-none"></select>
+            </div>
+
+            <!-- Custom Coordinates Panel (hidden unless Custom selected) -->
+            <div id="custom-panel" class="hidden rounded-lg border border-[var(--border)] bg-[var(--background)] p-2.5 space-y-2">
+              <div class="grid grid-cols-2 gap-1.5 text-xs">
+                <label class="block">
+                  <span class="text-[var(--muted-foreground)] block mb-0.5">Name</span>
+                  <input id="custom-name" type="text" value="Custom" class="w-full font-mono bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded px-2 py-1" />
+                </label>
+                <label class="block">
+                  <span class="text-[var(--muted-foreground)] block mb-0.5">IANA Timezone</span>
+                  <input id="custom-zone" type="text" value="UTC" class="w-full font-mono bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded px-2 py-1" />
+                </label>
+                <label class="block">
+                  <span class="text-[var(--muted-foreground)] block mb-0.5">Latitude</span>
+                  <input id="custom-lat" type="number" step="0.0001" min="-85" max="85" value="31.9539" class="w-full font-mono bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded px-2 py-1" />
+                </label>
+                <label class="block">
+                  <span class="text-[var(--muted-foreground)] block mb-0.5">Longitude</span>
+                  <input id="custom-lon" type="number" step="0.0001" min="-180" max="180" value="35.9106" class="w-full font-mono bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded px-2 py-1" />
+                </label>
+              </div>
+              <button id="apply-custom" class="w-full py-1 px-2 rounded-md border border-[var(--border)] bg-[var(--card)] text-xs font-medium text-[var(--foreground)] hover:opacity-90">
+                Apply Custom Location
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="border-[var(--border)]" />
+
+        <!-- Local Time & Date -->
         <div class="space-y-2">
           <div class="flex items-center justify-between gap-2">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Amman Local Time</h2>
+            <h2 id="local-time-heading" class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Amman Local Time</h2>
             <input id="date-input" type="date" class="text-xs font-mono bg-[var(--background)] text-[var(--foreground)] border border-[var(--border)] rounded-md px-2 py-0.5" />
           </div>
 
           <div class="flex items-baseline justify-between">
-            <span id="time-readout" class="text-2xl font-mono font-semibold tabular-nums tracking-tight">17:34</span>
-            <span id="countdown-readout" class="text-xs font-mono text-[var(--muted-foreground)] tabular-nums">Maghrib aligned</span>
+            <span id="time-readout" class="text-2xl font-mono font-semibold tabular-nums tracking-tight">15:14</span>
+            <span id="countdown-readout" class="text-xs font-mono text-[var(--muted-foreground)] tabular-nums">Asr centered</span>
           </div>
 
-          <input id="time-slider" type="range" min="0" max="1439" step="1" value="1054" class="w-full accent-[var(--primary)]" />
+          <input id="time-slider" type="range" min="0" max="1439" step="1" value="914" class="w-full accent-[var(--primary)]" />
           <div class="flex justify-between text-xs font-mono text-[var(--muted-foreground)] tabular-nums">
             <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:59</span>
           </div>
@@ -110,6 +167,7 @@
 
         <hr class="border-[var(--border)]" />
 
+        <!-- Five Prayer Orbits -->
         <div class="space-y-1.5">
           <div class="flex items-center justify-between">
             <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Five Prayer Orbits</h2>
@@ -120,6 +178,7 @@
 
         <hr class="border-[var(--border)]" />
 
+        <!-- Scene Tuning -->
         <div class="space-y-2">
           <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Scene Tuning</h2>
           <label class="block text-xs">
@@ -131,7 +190,7 @@
           </label>
           <label class="block text-xs">
             <div class="flex justify-between mb-0.5">
-              <span class="text-[var(--muted-foreground)]">Starfield Dust</span>
+              <span class="text-[var(--muted-foreground)]">Starfield</span>
               <span id="val-stars" class="font-mono tabular-nums">1.00×</span>
             </div>
             <input id="sl-stars" type="range" min="0.00" max="1.60" step="0.05" value="1.00" class="w-full accent-[var(--primary)]" />
@@ -613,7 +672,81 @@ void main() {
     fragColor = vec4(col, 1.0);
 }`;
 
-    const AMMAN = { lat: 31.9539, lon: 35.9106, tz: 3.0, fajrDeg: 18.0, ishaDeg: 18.0, asrShadow: 1.0 };
+    // Strictly two supported calculation sources: Jordan Ministry of Awqaf & MWL
+    const METHODS = {
+      JORDAN_AWQAF: {
+        id: 'JORDAN_AWQAF',
+        name: 'Jordan Ministry of Awqaf',
+        shortName: 'Jordan Awqaf',
+        fajrDeg: 18.0,
+        ishaDeg: 18.0,
+        asrShadow: 1.0,
+      },
+      MWL: {
+        id: 'MWL',
+        name: 'Muslim World League (MWL)',
+        shortName: 'MWL',
+        fajrDeg: 18.0,
+        ishaDeg: 17.0,
+        asrShadow: 1.0,
+      },
+    };
+
+    const WORLD_CITIES = [
+      { id: 'amman', name: 'Amman', country: 'Jordan', lat: 31.9539, lon: 35.9106, zone: 'Asia/Amman' },
+      { id: 'irbid', name: 'Irbid', country: 'Jordan', lat: 32.5568, lon: 35.8469, zone: 'Asia/Amman' },
+      { id: 'aqaba', name: 'Aqaba', country: 'Jordan', lat: 29.5321, lon: 35.0063, zone: 'Asia/Amman' },
+      { id: 'jerusalem', name: 'Jerusalem', country: 'Palestine', lat: 31.7683, lon: 35.2137, zone: 'Asia/Jerusalem' },
+      { id: 'beirut', name: 'Beirut', country: 'Lebanon', lat: 33.8938, lon: 35.5018, zone: 'Asia/Beirut' },
+      { id: 'damascus', name: 'Damascus', country: 'Syria', lat: 33.5138, lon: 36.2765, zone: 'Asia/Damascus' },
+      { id: 'baghdad', name: 'Baghdad', country: 'Iraq', lat: 33.3152, lon: 44.3661, zone: 'Asia/Baghdad' },
+      { id: 'makkah', name: 'Makkah', country: 'Saudi Arabia', lat: 21.4225, lon: 39.8262, zone: 'Asia/Riyadh' },
+      { id: 'madinah', name: 'Madinah', country: 'Saudi Arabia', lat: 24.4672, lon: 39.6111, zone: 'Asia/Riyadh' },
+      { id: 'riyadh', name: 'Riyadh', country: 'Saudi Arabia', lat: 24.7136, lon: 46.6753, zone: 'Asia/Riyadh' },
+      { id: 'jeddah', name: 'Jeddah', country: 'Saudi Arabia', lat: 21.4858, lon: 39.1925, zone: 'Asia/Riyadh' },
+      { id: 'dubai', name: 'Dubai', country: 'UAE', lat: 25.2048, lon: 55.2708, zone: 'Asia/Dubai' },
+      { id: 'doha', name: 'Doha', country: 'Qatar', lat: 25.2854, lon: 51.5310, zone: 'Asia/Qatar' },
+      { id: 'kuwait', name: 'Kuwait City', country: 'Kuwait', lat: 29.3759, lon: 47.9774, zone: 'Asia/Kuwait' },
+      { id: 'muscat', name: 'Muscat', country: 'Oman', lat: 23.5880, lon: 58.3829, zone: 'Asia/Muscat' },
+      { id: 'cairo', name: 'Cairo', country: 'Egypt', lat: 30.0444, lon: 31.2357, zone: 'Africa/Cairo' },
+      { id: 'casablanca', name: 'Casablanca', country: 'Morocco', lat: 33.5731, lon: -7.5898, zone: 'Africa/Casablanca' },
+      { id: 'tunis', name: 'Tunis', country: 'Tunisia', lat: 36.8065, lon: 10.1815, zone: 'Africa/Tunis' },
+      { id: 'algiers', name: 'Algiers', country: 'Algeria', lat: 36.7538, lon: 3.0588, zone: 'Africa/Algiers' },
+      { id: 'lagos', name: 'Lagos', country: 'Nigeria', lat: 6.5244, lon: 3.3792, zone: 'Africa/Lagos' },
+      { id: 'johannesburg', name: 'Johannesburg', country: 'South Africa', lat: -26.2041, lon: 28.0473, zone: 'Africa/Johannesburg' },
+      { id: 'istanbul', name: 'Istanbul', country: 'Turkey', lat: 41.0082, lon: 28.9784, zone: 'Europe/Istanbul' },
+      { id: 'london', name: 'London', country: 'United Kingdom', lat: 51.5074, lon: -0.1278, zone: 'Europe/London' },
+      { id: 'paris', name: 'Paris', country: 'France', lat: 48.8566, lon: 2.3522, zone: 'Europe/Paris' },
+      { id: 'amsterdam', name: 'Amsterdam', country: 'Netherlands', lat: 52.3676, lon: 4.9041, zone: 'Europe/Amsterdam' },
+      { id: 'berlin', name: 'Berlin', country: 'Germany', lat: 52.5200, lon: 13.4050, zone: 'Europe/Berlin' },
+      { id: 'madrid', name: 'Madrid', country: 'Spain', lat: 40.4168, lon: -3.7038, zone: 'Europe/Madrid' },
+      { id: 'stockholm', name: 'Stockholm', country: 'Sweden', lat: 59.3293, lon: 18.0686, zone: 'Europe/Stockholm' },
+      { id: 'oslo', name: 'Oslo', country: 'Norway', lat: 59.9139, lon: 10.7522, zone: 'Europe/Oslo' },
+      { id: 'reykjavik', name: 'Reykjavik', country: 'Iceland', lat: 64.1466, lon: -21.9426, zone: 'Atlantic/Reykjavik' },
+      { id: 'new_york', name: 'New York', country: 'USA', lat: 40.7128, lon: -74.0060, zone: 'America/New_York' },
+      { id: 'chicago', name: 'Chicago', country: 'USA', lat: 41.8781, lon: -87.6298, zone: 'America/Chicago' },
+      { id: 'dearborn', name: 'Dearborn', country: 'USA', lat: 42.3223, lon: -83.1763, zone: 'America/Detroit' },
+      { id: 'houston', name: 'Houston', country: 'USA', lat: 29.7604, lon: -95.3698, zone: 'America/Chicago' },
+      { id: 'los_angeles', name: 'Los Angeles', country: 'USA', lat: 34.0522, lon: -118.2437, zone: 'America/Los_Angeles' },
+      { id: 'san_francisco', name: 'San Francisco', country: 'USA', lat: 37.7749, lon: -122.4194, zone: 'America/Los_Angeles' },
+      { id: 'toronto', name: 'Toronto', country: 'Canada', lat: 43.6532, lon: -79.3832, zone: 'America/Toronto' },
+      { id: 'vancouver', name: 'Vancouver', country: 'Canada', lat: 49.2827, lon: -123.1207, zone: 'America/Vancouver' },
+      { id: 'honolulu', name: 'Honolulu', country: 'USA', lat: 21.3069, lon: -157.8583, zone: 'Pacific/Honolulu' },
+      { id: 'sao_paulo', name: 'São Paulo', country: 'Brazil', lat: -23.5505, lon: -46.6333, zone: 'America/Sao_Paulo' },
+      { id: 'islamabad', name: 'Islamabad', country: 'Pakistan', lat: 33.6844, lon: 73.0479, zone: 'Asia/Karachi' },
+      { id: 'karachi', name: 'Karachi', country: 'Pakistan', lat: 24.8607, lon: 67.0011, zone: 'Asia/Karachi' },
+      { id: 'new_delhi', name: 'New Delhi', country: 'India', lat: 28.6139, lon: 77.2090, zone: 'Asia/Kolkata' },
+      { id: 'dhaka', name: 'Dhaka', country: 'Bangladesh', lat: 23.8103, lon: 90.4125, zone: 'Asia/Dhaka' },
+      { id: 'kuala_lumpur', name: 'Kuala Lumpur', country: 'Malaysia', lat: 3.1390, lon: 101.6869, zone: 'Asia/Kuala_Lumpur' },
+      { id: 'singapore', name: 'Singapore', country: 'Singapore', lat: 1.3521, lon: 103.8198, zone: 'Asia/Singapore' },
+      { id: 'jakarta', name: 'Jakarta', country: 'Indonesia', lat: -6.2088, lon: 106.8456, zone: 'Asia/Jakarta' },
+      { id: 'tokyo', name: 'Tokyo', country: 'Japan', lat: 35.6762, lon: 139.6503, zone: 'Asia/Tokyo' },
+      { id: 'seoul', name: 'Seoul', country: 'South Korea', lat: 37.5665, lon: 126.9780, zone: 'Asia/Seoul' },
+      { id: 'sydney', name: 'Sydney', country: 'Australia', lat: -33.8688, lon: 151.2093, zone: 'Australia/Sydney' },
+      { id: 'melbourne', name: 'Melbourne', country: 'Australia', lat: -37.8136, lon: 144.9631, zone: 'Australia/Melbourne' },
+      { id: 'auckland', name: 'Auckland', country: 'New Zealand', lat: -36.8509, lon: 174.7645, zone: 'Pacific/Auckland' },
+    ];
+
     const PRAYERS = [
       { id: 'fajr',    name: 'Fajr',    orbitR: 13.5, radius: 0.50 },
       { id: 'dhuhr',   name: 'Dhuhr',   orbitR: 16.8, radius: 0.58 },
@@ -622,11 +755,57 @@ void main() {
       { id: 'isha',    name: 'Isha',    orbitR: 26.7, radius: 0.55 },
     ];
 
-    function julianDay(y, m, d) {
-      if (m <= 2) { y -= 1; m += 12; }
-      const A = Math.floor(y / 100);
-      const B = 2 - A + Math.floor(A / 4);
-      return Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + d + B - 1524.5;
+    let currentLoc = { ...WORLD_CITIES[0] };
+    let currentMethod = METHODS.JORDAN_AWQAF;
+
+    function safeZone(zone) {
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone: zone }).format(new Date());
+        return zone;
+      } catch {
+        return 'UTC';
+      }
+    }
+
+    function getZoneParts(epochMs, zone) {
+      const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: safeZone(zone),
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hourCycle: 'h23',
+      });
+      const map = Object.fromEntries(fmt.formatToParts(new Date(epochMs)).map(p => [p.type, p.value]));
+      return {
+        y: Number(map.year),
+        m: Number(map.month),
+        d: Number(map.day),
+        h: Number(map.hour) % 24,
+        min: Number(map.minute),
+        sec: Number(map.second),
+      };
+    }
+
+    function getZoneOffsetMs(epochMs, zone) {
+      const p = getZoneParts(epochMs, zone);
+      const asUtc = Date.UTC(p.y, p.m - 1, p.d, p.h, p.min, p.sec);
+      return asUtc - Math.floor(epochMs / 1000) * 1000;
+    }
+
+    function formatUtcOffset(epochMs, zone) {
+      const sec = Math.round(getZoneOffsetMs(epochMs, zone) / 1000);
+      const sign = sec >= 0 ? '+' : '-';
+      const absSec = Math.abs(sec);
+      const h = Math.floor(absSec / 3600);
+      const m = Math.floor((absSec % 3600) / 60);
+      return m === 0 ? `UTC${sign}${h}` : `UTC${sign}${h}:${String(m).padStart(2, '0')}`;
+    }
+
+    function localDateTimeToEpochMs(y, m, d, h, min, sec, zone) {
+      const guess = Date.UTC(y, m - 1, d, h, min, sec);
+      const off1 = getZoneOffsetMs(guess, zone);
+      const t1 = guess - off1;
+      const off2 = getZoneOffsetMs(t1, zone);
+      return guess - off2;
     }
 
     function sunPosition(jd) {
@@ -645,31 +824,11 @@ void main() {
       return { decl, eqt };
     }
 
-    function hourAngleForAlt(latRad, decl, altDeg) {
+    function rawCosHourAngle(latRad, decl, altDeg) {
       const altRad = altDeg * Math.PI / 180.0;
-      const cosHa = Math.max(-1, Math.min(1,
-        (Math.sin(altRad) - Math.sin(latRad) * Math.sin(decl)) / (Math.cos(latRad) * Math.cos(decl))
-      ));
-      return (Math.acos(cosHa) * 180 / Math.PI) / 15.0;
-    }
-
-    function computeAmmanDay(y, m, d) {
-      const jd0 = julianDay(y, m, d) - AMMAN.lon / 360.0;
-      const latR = AMMAN.lat * Math.PI / 180.0;
-      const evalAt = (approxH, fn) => {
-        const { decl, eqt } = sunPosition(jd0 + approxH / 24.0);
-        const noon = 12.0 + AMMAN.tz - AMMAN.lon / 15.0 - eqt;
-        return fn(noon, decl);
-      };
-      const fajr = evalAt(5.0, (n, decl) => n - hourAngleForAlt(latR, decl, -AMMAN.fajrDeg));
-      const dhuhr = evalAt(12.3, (n) => n);
-      const asr = evalAt(15.3, (n, decl) => {
-        const alt = Math.atan(1.0 / (AMMAN.asrShadow + Math.tan(Math.abs(latR - decl)))) * 180 / Math.PI;
-        return n + hourAngleForAlt(latR, decl, alt);
-      });
-      const maghrib = evalAt(17.5, (n, decl) => n + hourAngleForAlt(latR, decl, -0.8333));
-      const isha = evalAt(19.0, (n, decl) => n + hourAngleForAlt(latR, decl, -AMMAN.ishaDeg));
-      return [fajr, dhuhr, asr, maghrib, isha];
+      const denom = Math.cos(latRad) * Math.cos(decl);
+      if (Math.abs(denom) < 1e-9) return 2.0;
+      return (Math.sin(altRad) - Math.sin(latRad) * Math.sin(decl)) / denom;
     }
 
     function shiftDate(y, m, d, deltaDays) {
@@ -677,51 +836,144 @@ void main() {
       return [dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate()];
     }
 
-    function computeOrbitalState(y, m, d, hourOfDay) {
-      const [py, pm, pd] = shiftDate(y, m, d, -1);
-      const [ny, nm, nd] = shiftDate(y, m, d, +1);
-      const prev = computeAmmanDay(py, pm, pd).map(h => h - 24.0);
-      const today = computeAmmanDay(y, m, d);
-      const next = computeAmmanDay(ny, nm, nd).map(h => h + 24.0);
+    function computePrayerDay(loc, method, y, m, d) {
+      const zone = safeZone(loc.zone);
+      const lat = Math.max(-85, Math.min(85, loc.lat));
+      const latRad = lat * Math.PI / 180.0;
+      const lon = loc.lon;
+
+      const utcMidnightMs = Date.UTC(y, m - 1, d, 0, 0, 0);
+      const civilNoonMs = localDateTimeToEpochMs(y, m, d, 12, 0, 0, zone);
+      const civilNoonUtcH = (civilNoonMs - utcMidnightMs) / 3_600_000.0;
+
+      const utcNoonAt = (utcHourApprox) => {
+        const jd = (utcMidnightMs + utcHourApprox * 3_600_000.0) / 86_400_000.0 + 2440587.5;
+        const { decl, eqt } = sunPosition(jd);
+        let noonUtc = 12.0 - lon / 15.0 - eqt;
+        noonUtc += Math.round((civilNoonUtcH - noonUtc) / 24.0) * 24.0;
+        return { noonUtc, decl };
+      };
+
+      const dhuhr0 = utcNoonAt(civilNoonUtcH).noonUtc;
+      const dhuhrUtc = utcNoonAt(dhuhr0).noonUtc;
+
+      const sr = utcNoonAt(dhuhrUtc - 6.0);
+      const srCos = rawCosHourAngle(latRad, sr.decl, -0.8333);
+      const srHa = srCos < -1 ? 11.5 : srCos > 1 ? 0.5 : (Math.acos(srCos) * 180 / Math.PI) / 15.0;
+      const sunriseUtc = sr.noonUtc - srHa;
+
+      const ss = utcNoonAt(dhuhrUtc + 6.0);
+      const ssCos = rawCosHourAngle(latRad, ss.decl, -0.8333);
+      const ssHa = ssCos < -1 ? 11.5 : ssCos > 1 ? 0.5 : (Math.acos(ssCos) * 180 / Math.PI) / 15.0;
+      const maghribUtc = ss.noonUtc + ssHa;
+
+      const nightHours = Math.max(1.0, Math.min(23.0, 24.0 - (maghribUtc - sunriseUtc)));
+
+      const f = utcNoonAt(sunriseUtc - 1.5);
+      const fCos = rawCosHourAngle(latRad, f.decl, -method.fajrDeg);
+      const maxFajr = nightHours * (method.fajrDeg / 60.0);
+      let fajrUtc;
+      if (fCos >= -1 && fCos <= 1) {
+        const astro = f.noonUtc - (Math.acos(fCos) * 180 / Math.PI) / 15.0;
+        fajrUtc = (sunriseUtc - astro > maxFajr && Math.abs(lat) > 45.0) ? (sunriseUtc - maxFajr) : astro;
+      } else {
+        fajrUtc = sunriseUtc - maxFajr;
+      }
+      fajrUtc = Math.min(fajrUtc, sunriseUtc - 0.05);
+
+      const a = utcNoonAt(dhuhrUtc + 3.0);
+      const zenithRad = Math.abs(latRad - a.decl);
+      let asrUtc;
+      if (zenithRad < Math.PI * 0.495 && ssCos <= 1) {
+        const asrAlt = Math.atan(1.0 / (method.asrShadow + Math.tan(zenithRad))) * 180 / Math.PI;
+        const aCos = rawCosHourAngle(latRad, a.decl, asrAlt);
+        asrUtc = (aCos >= -1 && aCos <= 1)
+          ? Math.max(dhuhrUtc + 0.05, Math.min(maghribUtc - 0.05, a.noonUtc + (Math.acos(aCos) * 180 / Math.PI) / 15.0))
+          : dhuhrUtc + 0.5 * (maghribUtc - dhuhrUtc);
+      } else {
+        asrUtc = dhuhrUtc + 0.5 * (maghribUtc - dhuhrUtc);
+      }
+
+      const ishaEval = utcNoonAt(maghribUtc + 1.5);
+      const iCos = rawCosHourAngle(latRad, ishaEval.decl, -method.ishaDeg);
+      const maxIsha = nightHours * (method.ishaDeg / 60.0);
+      let ishaUtc;
+      if (iCos >= -1 && iCos <= 1) {
+        const astro = ishaEval.noonUtc + (Math.acos(iCos) * 180 / Math.PI) / 15.0;
+        ishaUtc = (astro - maghribUtc > maxIsha && Math.abs(lat) > 45.0) ? (maghribUtc + maxIsha) : astro;
+      } else {
+        ishaUtc = maghribUtc + maxIsha;
+      }
+      ishaUtc = Math.max(ishaUtc, maghribUtc + 0.05);
+
+      const utcHours = [fajrUtc, dhuhrUtc, asrUtc, maghribUtc, ishaUtc];
+      return utcHours.map(h => Math.round(utcMidnightMs + h * 3_600_000.0));
+    }
+
+    function fmtInstant(epochMs, zone) {
+      const rounded = Math.round(epochMs / 60_000) * 60_000;
+      const p = getZoneParts(rounded, zone);
+      return `${String(p.h).padStart(2, '0')}:${String(p.min).padStart(2, '0')}`;
+    }
+
+    function computeOrbitalState(loc, method, epochMs) {
+      const zone = safeZone(loc.zone);
+      const p = getZoneParts(epochMs, zone);
+      const [py, pm, pd] = shiftDate(p.y, p.m, p.d, -1);
+      const [ny, nm, nd] = shiftDate(p.y, p.m, p.d, +1);
+
+      const prev = computePrayerDay(loc, method, py, pm, pd);
+      const today = computePrayerDay(loc, method, p.y, p.m, p.d);
+      const next = computePrayerDay(loc, method, ny, nm, nd);
+      let prev2 = null, next2 = null;
 
       const angles = [];
       for (let i = 0; i < 5; i++) {
-        const t0 = hourOfDay < today[i] ? prev[i] : today[i];
-        const t1 = hourOfDay < today[i] ? today[i] : next[i];
-        let phase = (hourOfDay - t0) / (t1 - t0);
+        let t0, t1;
+        if (epochMs < prev[i]) {
+          if (!prev2) {
+            const [p2y, p2m, p2d] = shiftDate(p.y, p.m, p.d, -2);
+            prev2 = computePrayerDay(loc, method, p2y, p2m, p2d);
+          }
+          t0 = prev2[i]; t1 = prev[i];
+        } else if (epochMs < today[i]) {
+          t0 = prev[i]; t1 = today[i];
+        } else if (epochMs < next[i]) {
+          t0 = today[i]; t1 = next[i];
+        } else {
+          if (!next2) {
+            const [n2y, n2m, n2d] = shiftDate(p.y, p.m, p.d, +2);
+            next2 = computePrayerDay(loc, method, n2y, n2m, n2d);
+          }
+          t0 = next[i]; t1 = next2[i];
+        }
+        let phase = (epochMs - t0) / Math.max(1, t1 - t0);
         phase = ((phase % 1) + 1) % 1;
         if (phase >= 0.5) phase -= 1.0;
         angles.push(phase * 2.0 * Math.PI);
       }
 
-      let nextIdx = today.findIndex(h => h >= hourOfDay);
-      let minToNext;
-      if (nextIdx === -1) {
-        nextIdx = 0;
-        minToNext = Math.round((next[0] - hourOfDay) * 60);
-      } else {
-        minToNext = Math.round((today[nextIdx] - hourOfDay) * 60);
+      let nextIdx = 0;
+      let nextMs = Infinity;
+      for (const dayArr of [prev, today, next]) {
+        for (let i = 0; i < 5; i++) {
+          if (dayArr[i] >= epochMs && dayArr[i] < nextMs) {
+            nextMs = dayArr[i];
+            nextIdx = i;
+          }
+        }
       }
-      return { angles, today, nextIdx, minToNext };
+      const minToNext = Math.round(Math.max(0, nextMs - epochMs) / 60_000);
+      return { angles, today, nextIdx, minToNext, parts: p, epochMs };
     }
 
-    function fmtTime(hours) {
-      const total = Math.round(hours * 60);
-      const h = ((Math.floor(total / 60) % 24) + 24) % 24;
-      const m = ((total % 60) + 60) % 60;
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    function fmtCoords(loc) {
+      const ns = loc.lat >= 0 ? 'N' : 'S';
+      const ew = loc.lon >= 0 ? 'E' : 'W';
+      return `${Math.abs(loc.lat).toFixed(2)}°${ns}, ${Math.abs(loc.lon).toFixed(2)}°${ew}`;
     }
 
-    function nowInAmman() {
-      const a = new Date(Date.now() + AMMAN.tz * 3600_000);
-      return {
-        y: a.getUTCFullYear(),
-        m: a.getUTCMonth() + 1,
-        d: a.getUTCDate(),
-        hour: a.getUTCHours() + a.getUTCMinutes() / 60 + a.getUTCSeconds() / 3600,
-      };
-    }
-
+    // WebGL2 Setup
     const canvas = document.getElementById('gl-canvas');
     const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
     if (!gl) throw new Error('WebGL2 unavailable');
@@ -757,16 +1009,98 @@ void main() {
     let showLabels = true;
     let showUi = false;
 
-    const ammanNowInit = nowInAmman();
-    let selDate = [ammanNowInit.y, ammanNowInit.m, ammanNowInit.d];
-    const initDay = computeAmmanDay(selDate[0], selDate[1], selDate[2]);
-    let simHour = initDay[3];
+    const initParts = getZoneParts(Date.now(), currentLoc.zone);
+    let selDate = [initParts.y, initParts.m, initParts.d];
+    let simEpochMs = computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2])[2]; // Start aligned on Asr
 
     const dateInput = document.getElementById('date-input');
-    dateInput.value = `${selDate[0]}-${String(selDate[1]).padStart(2, '0')}-${String(selDate[2]).padStart(2, '0')}`;
-
     const timeSlider = document.getElementById('time-slider');
     const prayerList = document.getElementById('prayer-list');
+    const citySearch = document.getElementById('city-search');
+    const citySelect = document.getElementById('city-select');
+    const customPanel = document.getElementById('custom-panel');
+
+    function populateCitySelect(filterText = '') {
+      const q = filterText.trim().toLowerCase();
+      const matches = WORLD_CITIES.filter(c =>
+        !q || c.name.toLowerCase().includes(q) || c.country.toLowerCase().includes(q) || c.zone.toLowerCase().includes(q)
+      );
+      citySelect.innerHTML = '';
+      for (const c of matches) {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.name}, ${c.country}`;
+        citySelect.appendChild(opt);
+      }
+      const customOpt = document.createElement('option');
+      customOpt.value = '__custom__';
+      customOpt.textContent = 'Custom coordinates…';
+      citySelect.appendChild(customOpt);
+
+      if (currentLoc.isCustom) {
+        citySelect.value = '__custom__';
+      } else if (matches.some(c => c.id === currentLoc.id)) {
+        citySelect.value = currentLoc.id;
+      }
+    }
+
+    populateCitySelect();
+
+    citySearch.addEventListener('input', () => populateCitySelect(citySearch.value));
+
+    citySelect.addEventListener('change', () => {
+      if (citySelect.value === '__custom__') {
+        customPanel.classList.remove('hidden');
+        document.getElementById('custom-name').value = currentLoc.isCustom ? currentLoc.name : 'Custom';
+        document.getElementById('custom-lat').value = currentLoc.lat.toFixed(4);
+        document.getElementById('custom-lon').value = currentLoc.lon.toFixed(4);
+        document.getElementById('custom-zone').value = currentLoc.zone;
+        return;
+      }
+      customPanel.classList.add('hidden');
+      const picked = WORLD_CITIES.find(c => c.id === citySelect.value);
+      if (picked) {
+        currentLoc = { ...picked };
+        const p = getZoneParts(Date.now(), currentLoc.zone);
+        selDate = [p.y, p.m, p.d];
+        if (mode === 'live') {
+          simEpochMs = Date.now();
+        } else {
+          simEpochMs = computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2])[2];
+        }
+        refreshUI();
+      }
+    });
+
+    document.getElementById('apply-custom').addEventListener('click', () => {
+      const name = document.getElementById('custom-name').value.trim() || 'Custom';
+      const lat = Math.max(-85, Math.min(85, parseFloat(document.getElementById('custom-lat').value) || 0));
+      const lon = Math.max(-180, Math.min(180, parseFloat(document.getElementById('custom-lon').value) || 0));
+      const zone = safeZone(document.getElementById('custom-zone').value.trim() || 'UTC');
+      currentLoc = { id: 'custom', name, country: '', lat, lon, zone, isCustom: true };
+      const p = getZoneParts(Date.now(), zone);
+      selDate = [p.y, p.m, p.d];
+      simEpochMs = mode === 'live'
+        ? Date.now()
+        : computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2])[2];
+      refreshUI();
+    });
+
+    const btnAwqaf = document.getElementById('src-awqaf');
+    const btnMwl = document.getElementById('src-mwl');
+    const segActive = 'px-2 py-1.5 rounded-md font-medium bg-[var(--primary)] text-[var(--primary-foreground)] transition-colors truncate';
+    const segIdle = 'px-2 py-1.5 rounded-md font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors truncate';
+
+    function setMethod(methodKey) {
+      currentMethod = METHODS[methodKey];
+      btnAwqaf.className = methodKey === 'JORDAN_AWQAF' ? segActive : segIdle;
+      btnMwl.className = methodKey === 'MWL' ? segActive : segIdle;
+      document.getElementById('source-angles').textContent = `${currentMethod.fajrDeg}° / ${currentMethod.ishaDeg}°`;
+      refreshUI();
+    }
+
+    btnAwqaf.addEventListener('click', () => setMethod('JORDAN_AWQAF'));
+    btnMwl.addEventListener('click', () => setMethod('MWL'));
 
     const prayerEls = PRAYERS.map((p, idx) => {
       const btn = document.createElement('button');
@@ -783,8 +1117,8 @@ void main() {
       `;
       btn.addEventListener('click', () => {
         setMode('scrub');
-        const d = computeAmmanDay(selDate[0], selDate[1], selDate[2]);
-        simHour = d[idx];
+        const dayInstants = computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2]);
+        simEpochMs = dayInstants[idx];
         refreshUI();
       });
       prayerList.appendChild(btn);
@@ -801,10 +1135,9 @@ void main() {
       btnLive.className = mode === 'live' ? activeCls : idleCls;
       btnTimelapse.className = mode === 'timelapse' ? activeCls : idleCls;
       if (mode === 'live') {
-        const a = nowInAmman();
-        selDate = [a.y, a.m, a.d];
-        simHour = a.hour;
-        dateInput.value = `${selDate[0]}-${String(selDate[1]).padStart(2, '0')}-${String(selDate[2]).padStart(2, '0')}`;
+        simEpochMs = Date.now();
+        const p = getZoneParts(simEpochMs, currentLoc.zone);
+        selDate = [p.y, p.m, p.d];
       }
       refreshUI();
     }
@@ -815,7 +1148,9 @@ void main() {
     dateInput.addEventListener('change', () => {
       const parts = dateInput.value.split('-').map(Number);
       if (parts.length === 3 && parts[0] > 1900) {
+        const curP = getZoneParts(simEpochMs, currentLoc.zone);
         selDate = parts;
+        simEpochMs = localDateTimeToEpochMs(parts[0], parts[1], parts[2], curP.h, curP.min, 0, currentLoc.zone);
         if (mode === 'live') setMode('scrub');
         refreshUI();
       }
@@ -823,7 +1158,10 @@ void main() {
 
     timeSlider.addEventListener('input', () => {
       if (mode !== 'scrub') setMode('scrub');
-      simHour = parseFloat(timeSlider.value) / 60.0;
+      const totalMin = parseInt(timeSlider.value, 10);
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      simEpochMs = localDateTimeToEpochMs(selDate[0], selDate[1], selDate[2], h, m, 0, currentLoc.zone);
       refreshUI();
     });
 
@@ -852,22 +1190,32 @@ void main() {
       document.getElementById('val-rbright').textContent = `${visual.ringBrightness.toFixed(2)}×`;
     });
 
-    let lastOrbital = computeOrbitalState(selDate[0], selDate[1], selDate[2], simHour);
+    let lastOrbital = computeOrbitalState(currentLoc, currentMethod, simEpochMs);
 
     function refreshUI() {
-      lastOrbital = computeOrbitalState(selDate[0], selDate[1], selDate[2], simHour);
-      const tStr = fmtTime(simHour);
+      lastOrbital = computeOrbitalState(currentLoc, currentMethod, simEpochMs);
+      const p = lastOrbital.parts;
+      selDate = [p.y, p.m, p.d];
+      dateInput.value = `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
+
+      const tStr = `${String(p.h).padStart(2, '0')}:${String(p.min).padStart(2, '0')}`;
+      const utcOff = formatUtcOffset(simEpochMs, currentLoc.zone);
+      const locTitle = currentLoc.country ? `${currentLoc.name}, ${currentLoc.country}` : currentLoc.name;
+
+      document.getElementById('header-meta').textContent =
+        `Pixel 10 Pro · 1280 × 2856 · ${locTitle} (${fmtCoords(currentLoc)} · ${utcOff}) · ${currentMethod.shortName}`;
+      document.getElementById('local-time-heading').textContent = `${currentLoc.name} Local Time`;
       document.getElementById('time-readout').textContent = tStr;
       document.getElementById('ui-clock').textContent = tStr;
       document.getElementById('ui-status-time').textContent = tStr;
-      document.getElementById('footer-time').textContent = `Amman ${tStr} (UTC+3)`;
+      document.getElementById('footer-time').textContent = `${currentLoc.name} ${tStr} (${utcOff})`;
 
-      const dtObj = new Date(Date.UTC(selDate[0], selDate[1] - 1, selDate[2]));
+      const dtObj = new Date(Date.UTC(p.y, p.m - 1, p.d));
       document.getElementById('ui-date').textContent = dtObj.toLocaleDateString('en-US', {
         weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC'
       });
 
-      timeSlider.value = Math.round(simHour * 60) % 1440;
+      timeSlider.value = p.h * 60 + p.min;
 
       let alignedName = null;
       for (let i = 0; i < 5; i++) {
@@ -889,7 +1237,7 @@ void main() {
         const degVal = lastOrbital.angles[i] * 180 / Math.PI;
         const isAligned = Math.abs(degVal) < 1.0;
         const isNext = i === lastOrbital.nextIdx;
-        el.querySelector('[data-time]').textContent = fmtTime(lastOrbital.today[i]);
+        el.querySelector('[data-time]').textContent = fmtInstant(lastOrbital.today[i], currentLoc.zone);
         el.querySelector('[data-angle]').textContent = `${degVal >= 0 ? '+' : ''}${degVal.toFixed(1)}°`;
         el.style.borderColor = isAligned ? 'var(--primary)' : '';
         el.style.opacity = (isAligned || isNext) ? '1' : '0.82';
@@ -940,8 +1288,10 @@ void main() {
         drawFrame(offGl, offProg, offLocs, 1280, 2856, 0.0, lastOrbital.angles);
         offGl.finish();
         const a = document.createElement('a');
+        const slug = currentLoc.name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        const tTag = document.getElementById('time-readout').textContent.replace(':', '');
         a.href = off.toDataURL('image/png');
-        a.download = `falak_amman_${fmtTime(simHour).replace(':', '')}_1280x2856.png`;
+        a.download = `falak_${slug}_${tTag}_1280x2856.png`;
         a.click();
         btn.textContent = 'Export Pixel 10 Pro PNG (1280 × 2856)';
       });
@@ -966,15 +1316,13 @@ void main() {
       lastTs = now;
 
       if (mode === 'timelapse') {
-        simHour = (simHour + dt * visual.timelapseSpeed) % 24.0;
+        simEpochMs += dt * visual.timelapseSpeed * 3_600_000.0;
         refreshUI();
       } else if (mode === 'live') {
         liveAccum += dt;
         if (liveAccum >= 0.5) {
           liveAccum = 0;
-          const a = nowInAmman();
-          selDate = [a.y, a.m, a.d];
-          simHour = a.hour;
+          simEpochMs = Date.now();
           refreshUI();
         }
       }

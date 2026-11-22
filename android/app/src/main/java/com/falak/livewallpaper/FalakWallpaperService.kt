@@ -1,13 +1,15 @@
 package com.falak.livewallpaper
 
 import android.app.WallpaperColors
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.os.Build
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
 
 /**
- * Android Live Wallpaper service rendering Falak's celestial Amman prayer orbits.
+ * Android Live Wallpaper service rendering Falak's celestial worldwide prayer orbits.
+ * Reacts live to manual location and calculation source updates saved in FalakPreferences.
  */
 class FalakWallpaperService : WallpaperService() {
 
@@ -16,9 +18,27 @@ class FalakWallpaperService : WallpaperService() {
     private inner class FalakEngine : Engine() {
         private var glThread: FalakGlThread? = null
 
+        @Volatile
+        private var currentSettings: FalakPreferences.Settings =
+            FalakPreferences.load(applicationContext)
+
+        private val prefsListener =
+            SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+                currentSettings = FalakPreferences.load(applicationContext)
+                glThread?.requestRedraw()
+            }
+
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
-            glThread = FalakGlThread(applicationContext).apply { start() }
+            currentSettings = FalakPreferences.load(applicationContext)
+            FalakPreferences.registerListener(applicationContext, prefsListener)
+            glThread = FalakGlThread(
+                context = applicationContext,
+                angleProvider = {
+                    val s = currentSettings
+                    PrayerTimesEngine.computeState(s.location, s.method).anglesRad
+                }
+            ).apply { start() }
         }
 
         override fun onSurfaceChanged(
@@ -33,6 +53,9 @@ class FalakWallpaperService : WallpaperService() {
 
         override fun onVisibilityChanged(visible: Boolean) {
             super.onVisibilityChanged(visible)
+            if (visible) {
+                currentSettings = FalakPreferences.load(applicationContext)
+            }
             glThread?.setVisible(visible)
         }
 
@@ -42,6 +65,7 @@ class FalakWallpaperService : WallpaperService() {
         }
 
         override fun onDestroy() {
+            FalakPreferences.unregisterListener(applicationContext, prefsListener)
             glThread?.stopAndRelease()
             glThread = null
             super.onDestroy()

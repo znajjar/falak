@@ -1,6 +1,6 @@
 {
   "name": "Falak",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "targetDevice": {
     "model": "Google Pixel 10 Pro",
     "displayType": "6.3-inch Super Actua LTPO OLED",
@@ -11,18 +11,30 @@
     "ppi": 495,
     "refreshRateHz": [1, 120]
   },
-  "location": {
+  "defaultLocation": {
     "city": "Amman",
     "country": "Jordan",
     "latitudeDeg": 31.9539,
     "longitudeDeg": 35.9106,
     "timezone": "Asia/Amman",
-    "utcOffsetHours": 3.0,
-    "method": "Jordan Ministry of Awqaf",
-    "fajrAngleDeg": 18.0,
-    "ishaAngleDeg": 18.0,
-    "asrShadowFactor": 1.0
+    "manualOnly": true
   },
+  "calculationSources": [
+    {
+      "id": "JORDAN_AWQAF",
+      "name": "Jordan Ministry of Awqaf",
+      "fajrAngleDeg": 18.0,
+      "ishaAngleDeg": 18.0,
+      "asrShadowFactor": 1.0
+    },
+    {
+      "id": "MWL",
+      "name": "Muslim World League (MWL)",
+      "fajrAngleDeg": 18.0,
+      "ishaAngleDeg": 17.0,
+      "asrShadowFactor": 1.0
+    }
+  ],
   "camera": {
     "position": [0.0, -13.0, 31.5],
     "pitchDeg": 53.03,
