@@ -2,14 +2,16 @@
 """Render a seamless 1280x640 animated GIF showcasing Falak during Asr prayer in Amman.
 
 Matches the 1280x640 social preview dimensions and obsidian starry-crescent backdrop,
-framing the live WebGL2 wallpaper inside a centered matte-black phone silhouette as
-Asr glides into exact center meridian alignment (15:14 Amman time), lingers while the
-star gently pulsates and the starfield & hilal crescents shimmer, then exits smoothly.
+framing the live WebGL2 wallpaper inside a centered matte-black phone silhouette with
+balanced bilingual branding (FALAK on the left wing, Classical Mushakkal Thuluth فَلَك
+on the right wing) as Asr glides into exact center meridian alignment (15:14 Amman time).
 """
 
 import base64
 import json
 import math
+import sys
+import xml.etree.ElementTree as ET
 from io import BytesIO
 from pathlib import Path
 from PIL import Image, ImageDraw
@@ -17,6 +19,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_GIF = ROOT / "renders" / "falak_asr_preview.gif"
+WORDMARK_XML = ROOT / "android/app/src/main/res/drawable/ic_falak_wordmark.xml"
 
 CANVAS_W, CANVAS_H = 1280, 640
 PHONE_W, PHONE_H = 266, 556
@@ -26,6 +29,15 @@ SCREEN_H = PHONE_H - 2 * BEZEL  # 538
 SCREEN_X = (CANVAS_W - SCREEN_W) // 2  # 516
 SCREEN_Y = (CANVAS_H - SCREEN_H) // 2  # 51
 SCREEN_RADIUS = 31
+
+
+def load_wordmark_path() -> str:
+    """Load the exact 1A Classical Mushakkal Thuluth (فَلَك) pathData from Android resources."""
+    tree = ET.parse(WORDMARK_XML)
+    ns = {"android": "http://schemas.android.com/apk/res/android"}
+    path_el = tree.getroot().find("path")
+    assert path_el is not None, f"Missing <path> in {WORDMARK_XML}"
+    return path_el.attrib[f"{{{ns['android']}}}pathData"]
 
 
 def julian_day(year: int, month: int, day: int) -> float:
@@ -96,42 +108,37 @@ def angles_for_hour(hour_of_day: float, today: list):
     return angles
 
 
-def build_backdrop_html() -> str:
-    """Build the static 1280x640 obsidian sky, concentric arcs, stars, hilal crescents & centered phone shell."""
-    # Sparse pinpoint stars balanced symmetrically around the centered phone (x in [507, 773])
+def build_backdrop_html(wordmark_d: str) -> str:
+    """Build the static 1280x640 obsidian sky, arcs, stars, hilal crescents, side branding & centered phone."""
+    # Sparse pinpoint stars positioned cleanly in open sky pockets away from text and calligraphy
     stars = [
-        (76, 82, 1.1, 0.40), (168, 52, 0.9, 0.28), (274, 118, 1.3, 0.48),
-        (364, 64, 0.9, 0.28), (446, 152, 1.1, 0.36), (112, 238, 0.9, 0.26),
-        (216, 294, 1.35, 0.50), (388, 268, 0.9, 0.28), (452, 376, 1.0, 0.32),
-        (84, 424, 1.0, 0.30), (192, 488, 1.1, 0.36), (326, 446, 0.9, 0.26),
-        (424, 558, 1.2, 0.40), (138, 578, 0.9, 0.25), (308, 588, 0.85, 0.24),
-        (838, 72, 1.0, 0.34), (918, 134, 1.25, 0.46), (1026, 58, 0.9, 0.28),
-        (1148, 86, 1.2, 0.44), (1216, 174, 0.9, 0.28), (854, 248, 1.3, 0.48),
-        (962, 298, 0.9, 0.26), (1094, 242, 1.1, 0.38), (1192, 326, 1.0, 0.32),
-        (828, 412, 0.95, 0.30), (936, 466, 1.15, 0.38), (1064, 434, 0.9, 0.26),
-        (1214, 462, 1.2, 0.40), (886, 568, 1.0, 0.32), (1042, 584, 0.9, 0.26),
-        (1168, 566, 0.9, 0.26),
+        (72, 74, 1.1, 0.38), (186, 52, 0.9, 0.28), (336, 78, 1.3, 0.46),
+        (446, 134, 1.1, 0.36), (62, 198, 0.9, 0.26), (452, 344, 1.0, 0.32),
+        (74, 484, 1.0, 0.30), (192, 548, 1.1, 0.36), (428, 536, 1.2, 0.40),
+        (312, 586, 0.85, 0.26), (464, 58, 0.9, 0.26),
+        (824, 68, 1.0, 0.34), (924, 108, 1.25, 0.46), (1054, 56, 0.9, 0.28),
+        (1176, 84, 1.2, 0.44), (1222, 184, 0.9, 0.28), (836, 266, 1.1, 0.36),
+        (1216, 336, 1.0, 0.32), (834, 442, 0.95, 0.30), (934, 528, 1.15, 0.38),
+        (1206, 488, 1.2, 0.40), (1088, 584, 0.9, 0.26), (1182, 574, 0.9, 0.26),
     ]
     star_svg = "\n".join(
         f'<circle cx="{x}" cy="{y}" r="{r}" fill="#FFF7E9" opacity="{op}"/>'
         for x, y, r, op in stars
     )
 
-    # Delicate Islamic micro-crescents (hilal) matching model/falak.frag evalCrescentLayer geometry
-    # Balanced cleanly on left & right obsidian sky wings around the centered phone
+    # Delicate Islamic micro-crescents (hilal) matching model/falak.frag evalCrescentLayer geometry,
+    # placed in open sky pockets above and below both side brand lockups
     crescents = [
-        (142, 148, 8.2, -26, 0.66),
-        (338, 174, 9.0,  32, 0.74),
-        (256, 374, 6.2, -40, 0.48),
-        (414, 462, 7.6,  24, 0.60),
-        (104, 514, 6.4, -22, 0.44),
-        (312, 542, 5.4,  38, 0.36),
-        (932, 162, 9.0, -30, 0.74),
-        (1118, 152, 7.8,  26, 0.64),
-        (1018, 356, 6.4,  42, 0.48),
-        (874, 482, 7.4, -22, 0.58),
-        (1176, 392, 5.8, -36, 0.42),
-        (1134, 526, 6.8,  28, 0.50),
+        (118, 114, 7.8, -26, 0.62),
+        (414,  92, 8.6,  32, 0.72),
+        (444, 466, 7.2,  24, 0.56),
+        (106, 534, 6.2, -22, 0.44),
+        (338, 548, 5.4,  38, 0.36),
+        (864, 116, 8.6, -30, 0.72),
+        (1152, 128, 7.6,  26, 0.62),
+        (848, 496, 7.2, -22, 0.56),
+        (1188, 424, 6.0, -36, 0.44),
+        (1124, 544, 6.4,  28, 0.48),
     ]
     crescent_defs = []
     crescent_uses = []
@@ -148,7 +155,6 @@ def build_backdrop_html() -> str:
             f'<circle cx="0" cy="0" r="{r:.3f}" fill="#FAF5EC" mask="url(#{mid})"/></g>'
         )
 
-    # Subtle concentric background orbital arcs centered symmetrically below the centered phone
     bg_arcs_svg = "\n".join(
         f'<circle cx="640" cy="760" r="{r}" fill="none" stroke="#FFF7E9" stroke-opacity="{op}" stroke-width="1"/>'
         for r, op in [(310, 0.075), (430, 0.065), (555, 0.055), (685, 0.042), (820, 0.032)]
@@ -162,15 +168,115 @@ def build_backdrop_html() -> str:
 <head>
 <meta charset="UTF-8"/>
 <style>
+  @font-face {{
+    font-family: 'Roboto';
+    src: url('file:///opt/flutter/bin/cache/artifacts/material_fonts/Roboto-Light.ttf') format('truetype');
+    font-weight: 300;
+  }}
+  @font-face {{
+    font-family: 'Roboto';
+    src: url('file:///opt/flutter/bin/cache/artifacts/material_fonts/Roboto-Regular.ttf') format('truetype');
+    font-weight: 400;
+  }}
+  @font-face {{
+    font-family: 'Roboto';
+    src: url('file:///opt/flutter/bin/cache/artifacts/material_fonts/Roboto-Medium.ttf') format('truetype');
+    font-weight: 500;
+  }}
+  @font-face {{
+    font-family: 'LibMono';
+    src: url('file:///usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf') format('truetype');
+    font-weight: 400;
+  }}
+
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
     width: {CANVAS_W}px;
     height: {CANVAS_H}px;
     overflow: hidden;
     background: #0B0B0D;
+    font-family: 'Roboto', sans-serif;
+    color: #FFF7E9;
     position: relative;
+    -webkit-font-smoothing: antialiased;
   }}
   .bg-layer {{ position: absolute; inset: 0; }}
+
+  /* Symmetric side brand wings flanking the centered phone */
+  .wing {{
+    position: absolute;
+    top: 0;
+    height: {CANVAS_H}px;
+    width: {phone_left}px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    z-index: 2;
+    padding: 0 56px;
+  }}
+  .wing-left {{ left: 0; padding-top: 18px; }}
+  .wing-right {{ right: 0; }}
+
+  .eyebrow {{
+    font-family: 'LibMono', monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.20em;
+    color: #848B9D;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }}
+  .latin-wordmark {{
+    font-size: 62px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    padding-left: 0.16em;
+    line-height: 1.0;
+    color: #FFF7E9;
+  }}
+  .hairline {{
+    width: 44px;
+    height: 1px;
+    background: #2C303D;
+    margin: 20px 0 18px;
+  }}
+  .tagline {{
+    font-size: 19px;
+    font-weight: 300;
+    line-height: 1.42;
+    color: #CBD1DF;
+    max-width: 300px;
+  }}
+  .meta-line {{
+    font-family: 'LibMono', monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    color: #6E7587;
+    margin-top: 20px;
+  }}
+
+  .arabic-hero {{
+    width: 214px;
+    height: 167px;
+    display: block;
+  }}
+  .right-sub {{
+    font-family: 'LibMono', monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.18em;
+    padding-left: 0.18em;
+    color: #8D94A6;
+    text-transform: uppercase;
+  }}
+  .repo-tag {{
+    font-family: 'LibMono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    color: #697082;
+    margin-top: 12px;
+  }}
+
   .phone {{
     position: absolute;
     left: {phone_left}px;
@@ -182,6 +288,7 @@ def build_backdrop_html() -> str:
     border: 1.5px solid #303441;
     padding: {BEZEL - 1}px;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.72);
+    z-index: 3;
   }}
   .btn-power {{
     position: absolute; right: -3px; top: 134px; width: 2.5px; height: 40px;
@@ -207,6 +314,27 @@ def build_backdrop_html() -> str:
     {star_svg}
     {''.join(crescent_uses)}
   </svg>
+
+  <!-- Left Wing: English Brand Wordmark & Details -->
+  <div class="wing wing-left">
+    <div class="eyebrow">Android Live Wallpaper</div>
+    <div class="latin-wordmark">FALAK</div>
+    <div class="hairline"></div>
+    <div class="tagline">Celestial prayer-time<br/>live wallpaper</div>
+    <div class="meta-line">OpenGL ES 3.0 · LTPO OLED · Offline</div>
+  </div>
+
+  <!-- Right Wing: Classical Mushakkal Thuluth Calligraphy (فَلَك) -->
+  <div class="wing wing-right">
+    <svg class="arabic-hero" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 50">
+      <path fill="#FFF7E9" fill-rule="evenodd" d="{wordmark_d}"/>
+    </svg>
+    <div class="hairline"></div>
+    <div class="right-sub">Five Prayer Orbits</div>
+    <div class="repo-tag">github.com/znajjar/falak</div>
+  </div>
+
+  <!-- Centered Matte-Black Phone Frame -->
   <div class="phone">
     <div class="btn-power"></div>
     <div class="btn-vol"></div>
@@ -244,15 +372,16 @@ def build_punch_hole_overlay(w: int, h: int) -> Image.Image:
 
 
 def main():
+    preview_only = "--preview-frame" in sys.argv
     vert_src = (ROOT / "model/falak.vert").read_text()
     frag_src = (ROOT / "model/falak.frag").read_text()
     cfg = json.loads((ROOT / "model/scene_config.json").read_text())
+    wordmark_d = load_wordmark_path()
 
     today = amman_prayers_hours(2026, 11, 22, cfg)
     asr_h = today[2]
     print(f"Amman Asr time: {int(asr_h):02d}:{int(round((asr_h % 1) * 60)):02d}")
 
-    # Render WebGL2 phone screen at 2x supersampling (496x1076) and downsample cleanly to 248x538
     rw, rh = SCREEN_W * 2, SCREEN_H * 2
     n_frames = 96
     fps = 20
@@ -261,7 +390,7 @@ def main():
     timeline = []
     for k in range(n_frames):
         frac = k / float(n_frames)
-        u = 2.0 * frac - 1.0  # [-1, +1)
+        u = 2.0 * frac - 1.0
         offset_h = 0.98 * (0.20 * u + 0.80 * (u ** 3))
         hour = asr_h + offset_h
         t_sec = k / float(fps)
@@ -333,6 +462,7 @@ window.renderFrame = (tSec, angles) => {{
     screen_mask = build_screen_mask(SCREEN_W, SCREEN_H, SCREEN_RADIUS)
     punch_overlay = build_punch_hole_overlay(SCREEN_W, SCREEN_H)
 
+    render_indices = [n_frames // 2] if preview_only else list(range(n_frames))
     screen_frames = []
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -345,27 +475,28 @@ window.renderFrame = (tSec, angles) => {{
             ],
         )
 
-        # 1. Render static 1280x640 obsidian backdrop + centered phone bezel at 2x retina
+        # Render static 1280x640 obsidian backdrop + side branding + centered phone bezel at 2x retina
         bg_page = browser.new_page(viewport={"width": CANVAS_W, "height": CANVAS_H}, device_scale_factor=2)
-        bg_page.set_content(build_backdrop_html(), wait_until="networkidle")
+        bg_page.set_content(build_backdrop_html(wordmark_d), wait_until="networkidle")
+        bg_page.wait_for_timeout(200)
         bg_raw = bg_page.screenshot()
         backdrop = Image.open(BytesIO(bg_raw)).convert("RGB").resize((CANVAS_W, CANVAS_H), Image.Resampling.LANCZOS)
         bg_page.close()
 
-        # 2. Render all 96 live WebGL2 shader frames for the centered phone screen
+        # Render live WebGL2 shader frames for the centered phone screen
         gl_page = browser.new_page(viewport={"width": rw, "height": rh})
         gl_page.set_content(gl_html)
-        for idx, (t_sec, angles) in enumerate(timeline):
+        for pos, idx in enumerate(render_indices):
+            t_sec, angles = timeline[idx]
             data_url = gl_page.evaluate("([t, a]) => window.renderFrame(t, a)", [t_sec, angles])
             im = Image.open(BytesIO(base64.b64decode(data_url.split(",", 1)[1]))).convert("RGBA")
             im_small = im.resize((SCREEN_W, SCREEN_H), Image.Resampling.LANCZOS)
             im_small = Image.alpha_composite(im_small, punch_overlay)
             screen_frames.append(im_small)
-            if (idx + 1) % 24 == 0:
-                print(f"  Rendered {idx + 1}/{n_frames} frames...")
+            if not preview_only and (pos + 1) % 24 == 0:
+                print(f"  Rendered {pos + 1}/{n_frames} frames...")
         browser.close()
 
-    # Composite the static phone bezel region around the screen so rounded corners anti-alias seamlessly
     screen_bg_crop = backdrop.crop((SCREEN_X, SCREEN_Y, SCREEN_X + SCREEN_W, SCREEN_Y + SCREEN_H)).convert("RGBA")
 
     def composite_screen_tile(screen_rgba: Image.Image) -> Image.Image:
@@ -373,13 +504,17 @@ window.renderFrame = (tSec, angles) => {{
         tile.paste(screen_rgba, (0, 0), screen_mask)
         return tile.convert("RGB")
 
-    # Build ONE shared 256-color optimal palette from the full center Asr frame so background + bezel + screen
-    # share identical colors with zero frame-to-frame flicker.
+    if preview_only:
+        preview_out = Path(sys.argv[sys.argv.index("--preview-frame") + 1])
+        full = backdrop.copy()
+        full.paste(composite_screen_tile(screen_frames[0]), (SCREEN_X, SCREEN_Y))
+        full.save(preview_out, optimize=True)
+        print(f"Saved preview frame: {preview_out}")
+        return
+
     center_full = backdrop.copy()
     center_full.paste(composite_screen_tile(screen_frames[n_frames // 2]), (SCREEN_X, SCREEN_Y))
     master_palette = center_full.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
-
-    # Quantize static backdrop ONCE so pixels outside the phone screen are bit-for-bit identical across all frames!
     backdrop_pal = backdrop.quantize(palette=master_palette, dither=Image.Dither.FLOYDSTEINBERG)
 
     pal_frames = []
