@@ -30,6 +30,7 @@ import android.widget.BaseAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.ScrollView
@@ -124,10 +125,26 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             background = roundedBox(dp, 20f, 0xC60D0E12.toInt(), 0x28E6EBF5)
         }
 
-        // Row 1: City time + next prayer countdown + LIVE/RESET pill
+        // Row 1: Calligraphic wordmark + city time + next prayer countdown + LIVE/RESET pill
         val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val wordmarkView = ImageView(this).apply {
+            setImageResource(R.drawable.ic_falak_wordmark)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = getString(R.string.app_name)
+            layoutParams = LinearLayout.LayoutParams((28 * dp).toInt(), (22 * dp).toInt()).apply {
+                marginEnd = (8 * dp).toInt()
+            }
+        }
+
+        val brandDivider = View(this).apply {
+            setBackgroundColor(0x30E6EBF5)
+            layoutParams = LinearLayout.LayoutParams((1 * dp).toInt().coerceAtLeast(1), (14 * dp).toInt()).apply {
+                marginEnd = (8 * dp).toInt()
+            }
         }
 
         statusLabel = TextView(this).apply {
@@ -137,7 +154,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                rightMargin = (8 * dp).toInt()
+                marginEnd = (8 * dp).toInt()
             }
         }
 
@@ -154,6 +171,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                 refreshHud()
             }
         }
+        topRow.addView(wordmarkView)
+        topRow.addView(brandDivider)
         topRow.addView(statusLabel)
         topRow.addView(livePill)
         dock.addView(topRow)
