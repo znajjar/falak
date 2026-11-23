@@ -1,6 +1,19 @@
 {
   "name": "Falak",
-  "version": "1.2.0",
+  "version": "1.3.0",
+  "defaultOrbitMode": "PRAYER_WINDOW",
+  "orbitModes": [
+    {
+      "id": "PRAYER_WINDOW",
+      "name": "Prayer Window",
+      "description": "Constant-velocity transit centered at each prayer: Fajr exits at Sunrise; Dhuhr mirrors its half-interval; Dhuhr->Asr->Maghrib->Isha hand off at midpoints, with Isha exiting at half-night."
+    },
+    {
+      "id": "ORBIT_24H",
+      "name": "24-Hour Orbit",
+      "description": "Continuous 360-degree ~24-hour astronomical cycle around the rising star."
+    }
+  ],
   "display": {
     "orientation": "portrait",
     "scaling": "Responsive across any vertical phone screen size, pixel density, and aspect ratio (16:9 through 22:9+ and portrait foldables)",

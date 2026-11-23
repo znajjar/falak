@@ -109,8 +109,23 @@
       <!-- Right: Worldwide Controls, Source Selector & Scene Tuning -->
       <aside class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 flex flex-col gap-3">
 
-        <!-- Source & Manual Location Selector -->
+        <!-- Orbit Mode, Source & Manual Location Selector -->
         <div class="space-y-2.5">
+          <div class="space-y-1">
+            <div class="flex items-center justify-between">
+              <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Orbit Mode</h2>
+              <span id="orbit-mode-desc" class="text-xs font-mono text-[var(--muted-foreground)]">Fajr→Sunrise · Midpoints</span>
+            </div>
+            <div class="grid grid-cols-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5 text-xs gap-0.5" role="group">
+              <button id="orbit-prayer-window" class="px-2 py-1.5 rounded-md font-medium bg-[var(--primary)] text-[var(--primary-foreground)] transition-colors truncate">
+                Prayer Window
+              </button>
+              <button id="orbit-24h" class="px-2 py-1.5 rounded-md font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors truncate">
+                24-Hour Orbit
+              </button>
+            </div>
+          </div>
+
           <div class="space-y-1">
             <div class="flex items-center justify-between">
               <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Calculation Source</h2>
@@ -187,9 +202,9 @@
 
         <!-- Five Prayer Orbits -->
         <div class="space-y-1.5">
-          <div class="flex items-center justify-between">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Five Prayer Orbits</h2>
-            <span class="text-xs text-[var(--muted-foreground)]">Tap to align</span>
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] whitespace-nowrap">Five Prayer Orbits</h2>
+            <span id="sunrise-meta" class="text-xs font-mono text-[var(--muted-foreground)] whitespace-nowrap">Sunrise --:--</span>
           </div>
           <div id="prayer-list" class="flex flex-col gap-1.5"></div>
         </div>
@@ -255,7 +270,7 @@ void main() {
     const FRAG_SRC = `#version 300 es
 precision highp float;
 
-// Falak — Celestial Prayer-Time Orbital Shader (v1.1.0)
+// Falak — Celestial Prayer-Time Orbital Shader (v1.3.0)
 // Portable GLSL ES 3.00 (Android OpenGL ES 3.0 + WebGL2).
 //
 // Responsive design for any vertical phone screen size and aspect ratio (16:9 to 22:9+ & foldables),
@@ -274,6 +289,7 @@ out vec4 fragColor;
 uniform vec2 uResolution;
 uniform float uTime;
 uniform float uPulseTime;
+uniform float uPrayerActivity; // >= 0: exact time-based prayer activity in [0,1]; < 0: angle fallback
 
 // Camera
 uniform vec3 uCamPos;
@@ -380,6 +396,9 @@ float filmGrain(vec2 fragCoord) {
 // Compute prayer-time proximity in [0, 1] across all 5 planets.
 // Peaks at 1.0 when any planet crosses center meridian (0 deg), smoothly tapering over ~15 min.
 float computePrayerActivity() {
+    if (uPrayerActivity >= 0.0) {
+        return clamp(uPrayerActivity, 0.0, 1.0);
+    }
     float prayerActivity = 0.0;
     for (int i = 0; i < 5; i++) {
         float a = abs(uPlanetAngles[i]);
@@ -1158,12 +1177,15 @@ void main() {
       ishaUtc = Math.max(ishaUtc, maghribUtc + 0.05);
 
       const utcHours = [fajrUtc, dhuhrUtc, asrUtc, maghribUtc, ishaUtc];
-      return utcHours.map((h, idx) => {
+      const instants = utcHours.map((h, idx) => {
         const rawMin = (utcMidnightMs + h * 3_600_000.0) / 60_000.0;
         const roundUp = method.roundUpDhuhrAsrIsha && (idx === 1 || idx === 2 || idx === 4);
         const roundedMin = roundUp ? Math.ceil(rawMin) : Math.floor(rawMin + 0.5);
         return roundedMin * 60_000;
       });
+      const sunriseMin = Math.floor((utcMidnightMs + sunriseUtc * 3_600_000.0) / 60_000.0 + 0.5);
+      const sunrise = Math.max(instants[0] + 60_000, sunriseMin * 60_000);
+      return { instants, sunrise };
     }
 
     function fmtInstant(epochMs, zone) {
@@ -1172,7 +1194,116 @@ void main() {
       return `${String(p.h).padStart(2, '0')}:${String(p.min).padStart(2, '0')}`;
     }
 
-    function computeOrbitalState(loc, method, epochMs) {
+    const ORBIT_MODES = {
+      PRAYER_WINDOW: {
+        id: 'PRAYER_WINDOW',
+        shortName: 'Prayer Window',
+        desc: 'Fajr→Sunrise · Midpoints',
+      },
+      ORBIT_24H: {
+        id: 'ORBIT_24H',
+        shortName: '24h Orbit',
+        desc: 'Continuous 360°',
+      },
+    };
+    let currentOrbitMode = ORBIT_MODES.PRAYER_WINDOW;
+
+    function computeEdgeAnglesRad(aspect) {
+      const safeAspect = Math.max(0.30, Math.min(1.20, aspect));
+      const halfW = 0.5 * safeAspect;
+      const deg = Math.PI / 180.0;
+      const focal = 0.5 / Math.tan(0.5 * 58.0 * deg);
+      const cp = Math.cos(53.03 * deg);
+      const sp = Math.sin(53.03 * deg);
+      const camY = -13.0;
+      const camZ = 31.5;
+
+      const rNxRaw = focal;
+      const rNyRaw = -halfW * sp;
+      const rNzRaw = halfW * cp;
+      const rLen = Math.hypot(rNxRaw, rNyRaw, rNzRaw);
+      const rNx = rNxRaw / rLen, rNy = rNyRaw / rLen, rNz = rNzRaw / rLen;
+
+      const bNyRaw = -focal * cp - 0.5 * sp;
+      const bNzRaw = -focal * sp + 0.5 * cp;
+      const bLen = Math.hypot(bNyRaw, bNzRaw);
+      const bNy = bNyRaw / bLen, bNz = bNzRaw / bLen;
+
+      return PRAYERS.map((pr) => {
+        const orbitR = pr.orbitR;
+        const padR = pr.radius * 1.08;
+        let lo = 0.0;
+        let hi = Math.PI * 0.92;
+        for (let step = 0; step < 28; step++) {
+          const mid = 0.5 * (lo + hi);
+          const vx = orbitR * Math.sin(mid);
+          const vy = -camY;
+          const vz = orbitR * Math.cos(mid) - camZ;
+          const zCam = vy * sp - vz * cp;
+          const dRight = vx * rNx + vy * rNy + vz * rNz;
+          const dBottom = vy * bNy + vz * bNz;
+          if (zCam > 0.01 && dRight < padR && dBottom < padR) {
+            lo = mid;
+          } else {
+            hi = mid;
+          }
+        }
+        return hi;
+      });
+    }
+
+    function computePrayerWindowAngles(epochMs, days, edgeAngles) {
+      const MS_PER_MIN = 60_000;
+      const wakeFadeMs = 4 * MS_PER_MIN;
+      const wakeFadeRad = 0.55;
+      const angles = [Math.PI, Math.PI, Math.PI, Math.PI, Math.PI];
+
+      for (let i = 0; i < 5; i++) {
+        const edge = edgeAngles[i];
+        for (let dIdx = 0; dIdx < 3; dIdx++) {
+          const d = days[dIdx];
+          const dNext = days[dIdx + 1];
+          const pMs = d.instants[i];
+          let enterMs, exitMs;
+          if (i === 0) {
+            exitMs = Math.max(pMs + MS_PER_MIN, d.sunrise);
+            enterMs = pMs - (exitMs - pMs);
+          } else if (i === 1) {
+            const half = Math.max(MS_PER_MIN, Math.floor((d.instants[2] - d.instants[1]) / 2));
+            enterMs = pMs - half;
+            exitMs = pMs + half;
+          } else if (i === 2) {
+            enterMs = Math.min(pMs - MS_PER_MIN, Math.floor((d.instants[1] + d.instants[2]) / 2));
+            exitMs = Math.max(pMs + MS_PER_MIN, Math.floor((d.instants[2] + d.instants[3]) / 2));
+          } else if (i === 3) {
+            enterMs = Math.min(pMs - MS_PER_MIN, Math.floor((d.instants[2] + d.instants[3]) / 2));
+            exitMs = Math.max(pMs + MS_PER_MIN, Math.floor((d.instants[3] + d.instants[4]) / 2));
+          } else {
+            enterMs = Math.min(pMs - MS_PER_MIN, Math.floor((d.instants[3] + d.instants[4]) / 2));
+            exitMs = Math.max(pMs + MS_PER_MIN, Math.floor((d.instants[4] + dNext.instants[0]) / 2));
+          }
+
+          if (epochMs >= enterMs && epochMs <= exitMs) {
+            const frac = (epochMs <= pMs)
+              ? (epochMs - pMs) / Math.max(1, pMs - enterMs)
+              : (epochMs - pMs) / Math.max(1, exitMs - pMs);
+            angles[i] = frac * edge;
+            break;
+          } else if (epochMs >= enterMs - wakeFadeMs && epochMs < enterMs) {
+            const u = (enterMs - epochMs) / wakeFadeMs;
+            angles[i] = Math.max(-Math.PI + 0.01, -(edge + wakeFadeRad * u));
+            break;
+          } else if (epochMs > exitMs && epochMs <= exitMs + wakeFadeMs) {
+            const u = (epochMs - exitMs) / wakeFadeMs;
+            angles[i] = Math.min(Math.PI - 0.01, edge + wakeFadeRad * u);
+            break;
+          }
+        }
+      }
+      return angles;
+    }
+
+    function computeOrbitalState(loc, method, epochMs, orbitMode = currentOrbitMode, aspect = 0.45) {
       const zone = safeZone(loc.zone);
       const p = getZoneParts(epochMs, zone);
       const [py, pm, pd] = shiftDate(p.y, p.m, p.d, -1);
@@ -1183,44 +1314,58 @@ void main() {
       const next = computePrayerDay(loc, method, ny, nm, nd);
       let prev2 = null, next2 = null;
 
-      const angles = [];
-      for (let i = 0; i < 5; i++) {
-        let t0, t1;
-        if (epochMs < prev[i]) {
-          if (!prev2) {
-            const [p2y, p2m, p2d] = shiftDate(p.y, p.m, p.d, -2);
-            prev2 = computePrayerDay(loc, method, p2y, p2m, p2d);
+      const edgeAngles = computeEdgeAnglesRad(aspect);
+      let angles;
+      if (orbitMode.id === 'PRAYER_WINDOW') {
+        const [n2y, n2m, n2d] = shiftDate(p.y, p.m, p.d, +2);
+        next2 = computePrayerDay(loc, method, n2y, n2m, n2d);
+        angles = computePrayerWindowAngles(epochMs, [prev, today, next, next2], edgeAngles);
+      } else {
+        angles = [];
+        for (let i = 0; i < 5; i++) {
+          let t0, t1;
+          if (epochMs < prev.instants[i]) {
+            if (!prev2) {
+              const [p2y, p2m, p2d] = shiftDate(p.y, p.m, p.d, -2);
+              prev2 = computePrayerDay(loc, method, p2y, p2m, p2d);
+            }
+            t0 = prev2.instants[i]; t1 = prev.instants[i];
+          } else if (epochMs < today.instants[i]) {
+            t0 = prev.instants[i]; t1 = today.instants[i];
+          } else if (epochMs < next.instants[i]) {
+            t0 = today.instants[i]; t1 = next.instants[i];
+          } else {
+            if (!next2) {
+              const [n2y, n2m, n2d] = shiftDate(p.y, p.m, p.d, +2);
+              next2 = computePrayerDay(loc, method, n2y, n2m, n2d);
+            }
+            t0 = next.instants[i]; t1 = next2.instants[i];
           }
-          t0 = prev2[i]; t1 = prev[i];
-        } else if (epochMs < today[i]) {
-          t0 = prev[i]; t1 = today[i];
-        } else if (epochMs < next[i]) {
-          t0 = today[i]; t1 = next[i];
-        } else {
-          if (!next2) {
-            const [n2y, n2m, n2d] = shiftDate(p.y, p.m, p.d, +2);
-            next2 = computePrayerDay(loc, method, n2y, n2m, n2d);
-          }
-          t0 = next[i]; t1 = next2[i];
+          let phase = (epochMs - t0) / Math.max(1, t1 - t0);
+          phase = ((phase % 1) + 1) % 1;
+          if (phase >= 0.5) phase -= 1.0;
+          angles.push(phase * 2.0 * Math.PI);
         }
-        let phase = (epochMs - t0) / Math.max(1, t1 - t0);
-        phase = ((phase % 1) + 1) % 1;
-        if (phase >= 0.5) phase -= 1.0;
-        angles.push(phase * 2.0 * Math.PI);
       }
 
       let nextIdx = 0;
       let nextMs = Infinity;
-      for (const dayArr of [prev, today, next]) {
+      let minDeltaMs = Infinity;
+      for (const dayObj of [prev, today, next]) {
         for (let i = 0; i < 5; i++) {
-          if (dayArr[i] >= epochMs && dayArr[i] < nextMs) {
-            nextMs = dayArr[i];
+          const t = dayObj.instants[i];
+          const delta = Math.abs(epochMs - t);
+          if (delta < minDeltaMs) minDeltaMs = delta;
+          if (t >= epochMs && t < nextMs) {
+            nextMs = t;
             nextIdx = i;
           }
         }
       }
+      const minDeltaMin = minDeltaMs / 60_000.0;
+      const prayerActivity = Math.exp(-Math.pow(minDeltaMin / 10.5, 2.0));
       const minToNext = Math.round(Math.max(0, nextMs - epochMs) / 60_000);
-      return { angles, today, nextIdx, minToNext, parts: p, epochMs };
+      return { angles, edgeAngles, today, nextIdx, minToNext, prayerActivity, parts: p, epochMs };
     }
 
     function fmtCoords(loc) {
@@ -1253,7 +1398,8 @@ void main() {
 
     const prog = buildProg(gl);
     const uniformNames = [
-      'uResolution', 'uTime', 'uPulseTime', 'uCamPos', 'uCamPitch', 'uCamYaw', 'uFovY',
+      'uResolution', 'uTime', 'uPulseTime', 'uPrayerActivity',
+      'uCamPos', 'uCamPitch', 'uCamYaw', 'uFovY',
       'uRingWidth', 'uRingBrightness', 'uPlanetOrbitR', 'uPlanetAngles', 'uPlanetRadii',
       'uPlanetDiffuse', 'uTerminatorWrap', 'uRimStrength',
       'uSunCoreR', 'uSunGlow', 'uGrainStrength', 'uStarfieldStrength',
@@ -1275,7 +1421,7 @@ void main() {
 
     const initParts = getZoneParts(Date.now(), currentLoc.zone);
     let selDate = [initParts.y, initParts.m, initParts.d];
-    let simEpochMs = computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2])[2]; // Start aligned on Asr
+    let simEpochMs = computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2]).instants[2]; // Start aligned on Asr
 
     const dateInput = document.getElementById('date-input');
     const timeSlider = document.getElementById('time-slider');
@@ -1330,7 +1476,7 @@ void main() {
         if (mode === 'live') {
           simEpochMs = Date.now();
         } else {
-          simEpochMs = computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2])[2];
+          simEpochMs = computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2]).instants[2];
         }
         refreshUI();
       }
@@ -1346,14 +1492,27 @@ void main() {
       selDate = [p.y, p.m, p.d];
       simEpochMs = mode === 'live'
         ? Date.now()
-        : computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2])[2];
+        : computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2]).instants[2];
       refreshUI();
     });
 
+    const btnOrbitPrayerWindow = document.getElementById('orbit-prayer-window');
+    const btnOrbit24h = document.getElementById('orbit-24h');
     const btnAwqaf = document.getElementById('src-awqaf');
     const btnMwl = document.getElementById('src-mwl');
     const segActive = 'px-2 py-1.5 rounded-md font-medium bg-[var(--primary)] text-[var(--primary-foreground)] transition-colors truncate';
     const segIdle = 'px-2 py-1.5 rounded-md font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors truncate';
+
+    function setOrbitMode(modeKey) {
+      currentOrbitMode = ORBIT_MODES[modeKey] || ORBIT_MODES.PRAYER_WINDOW;
+      btnOrbitPrayerWindow.className = currentOrbitMode.id === 'PRAYER_WINDOW' ? segActive : segIdle;
+      btnOrbit24h.className = currentOrbitMode.id === 'ORBIT_24H' ? segActive : segIdle;
+      document.getElementById('orbit-mode-desc').textContent = currentOrbitMode.desc;
+      refreshUI();
+    }
+
+    btnOrbitPrayerWindow.addEventListener('click', () => setOrbitMode('PRAYER_WINDOW'));
+    btnOrbit24h.addEventListener('click', () => setOrbitMode('ORBIT_24H'));
 
     function setMethod(methodKey) {
       currentMethod = METHODS[methodKey];
@@ -1384,8 +1543,8 @@ void main() {
       `;
       btn.addEventListener('click', () => {
         setMode('scrub');
-        const dayInstants = computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2]);
-        simEpochMs = dayInstants[idx];
+        const dayObj = computePrayerDay(currentLoc, currentMethod, selDate[0], selDate[1], selDate[2]);
+        simEpochMs = dayObj.instants[idx];
         refreshUI();
       });
       prayerList.appendChild(btn);
@@ -1501,10 +1660,11 @@ void main() {
       document.getElementById('val-speed').textContent = `${visual.timelapseSpeed.toFixed(1)} h/s`;
     });
 
-    let lastOrbital = computeOrbitalState(currentLoc, currentMethod, simEpochMs);
+    let lastOrbital = computeOrbitalState(currentLoc, currentMethod, simEpochMs, currentOrbitMode, exportW / exportH);
 
     function refreshUI() {
-      lastOrbital = computeOrbitalState(currentLoc, currentMethod, simEpochMs);
+      const aspect = exportW / Math.max(1, exportH);
+      lastOrbital = computeOrbitalState(currentLoc, currentMethod, simEpochMs, currentOrbitMode, aspect);
       const p = lastOrbital.parts;
       selDate = [p.y, p.m, p.d];
       dateInput.value = `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
@@ -1514,12 +1674,14 @@ void main() {
       const locTitle = currentLoc.country ? `${currentLoc.name}, ${currentLoc.country}` : currentLoc.name;
 
       document.getElementById('header-meta').textContent =
-        `LTPO OLED · ${ratioLabel} (${exportW} × ${exportH}) · ${locTitle} (${fmtCoords(currentLoc)} · ${utcOff}) · ${currentMethod.shortName}`;
+        `LTPO OLED · ${ratioLabel} (${exportW} × ${exportH}) · ${locTitle} (${fmtCoords(currentLoc)} · ${utcOff}) · ${currentMethod.shortName} · ${currentOrbitMode.shortName}`;
       document.getElementById('local-time-heading').textContent = `${currentLoc.name} Local Time`;
       document.getElementById('time-readout').textContent = tStr;
       document.getElementById('ui-clock').textContent = tStr;
       document.getElementById('ui-status-time').textContent = tStr;
       document.getElementById('footer-time').textContent = `${currentLoc.name} ${tStr} (${utcOff})`;
+      document.getElementById('sunrise-meta').textContent =
+        `Sunrise ${fmtInstant(lastOrbital.today.sunrise, currentLoc.zone)}`;
 
       const dtObj = new Date(Date.UTC(p.y, p.m - 1, p.d));
       document.getElementById('ui-date').textContent = dtObj.toLocaleDateString('en-US', {
@@ -1531,7 +1693,9 @@ void main() {
       let alignedName = null;
       for (let i = 0; i < 5; i++) {
         const degVal = lastOrbital.angles[i] * 180 / Math.PI;
-        if (Math.abs(degVal) < 0.6) alignedName = PRAYERS[i].name;
+        if (lastOrbital.prayerActivity > 0.25 && Math.abs(degVal) < 0.8) {
+          alignedName = PRAYERS[i].name;
+        }
       }
 
       const nextName = PRAYERS[lastOrbital.nextIdx].name;
@@ -1545,23 +1709,28 @@ void main() {
 
       for (let i = 0; i < 5; i++) {
         const el = prayerEls[i];
-        const degVal = lastOrbital.angles[i] * 180 / Math.PI;
-        const isAligned = Math.abs(degVal) < 1.0;
+        const angRad = lastOrbital.angles[i];
+        const degVal = angRad * 180 / Math.PI;
+        const isOffscreen = currentOrbitMode.id === 'PRAYER_WINDOW' && Math.abs(angRad) >= lastOrbital.edgeAngles[i] - 1e-4;
+        const isAligned = lastOrbital.prayerActivity > 0.25 && Math.abs(degVal) < 1.0;
         const isNext = i === lastOrbital.nextIdx;
-        el.querySelector('[data-time]').textContent = fmtInstant(lastOrbital.today[i], currentLoc.zone);
-        el.querySelector('[data-angle]').textContent = `${degVal >= 0 ? '+' : ''}${degVal.toFixed(1)}°`;
+        el.querySelector('[data-time]').textContent = fmtInstant(lastOrbital.today.instants[i], currentLoc.zone);
+        el.querySelector('[data-angle]').textContent = isOffscreen
+          ? 'Off-screen'
+          : `${degVal >= 0 ? '+' : ''}${degVal.toFixed(1)}°`;
         el.style.borderColor = isAligned ? 'var(--primary)' : '';
         el.style.opacity = (isAligned || isNext) ? '1' : '0.82';
       }
     }
 
-    function drawFrame(ctx, program, locations, w, h, tSec, pulseSec, angles) {
+    function drawFrame(ctx, program, locations, w, h, tSec, pulseSec, angles, prayerActivity) {
       const deg = Math.PI / 180.0;
       ctx.viewport(0, 0, w, h);
       ctx.useProgram(program);
       ctx.uniform2f(locations.uResolution, w, h);
       ctx.uniform1f(locations.uTime, tSec);
       ctx.uniform1f(locations.uPulseTime, pulseSec);
+      ctx.uniform1f(locations.uPrayerActivity, prayerActivity);
 
       ctx.uniform3f(locations.uCamPos, 0.0, -13.0, 31.5);
       ctx.uniform1f(locations.uCamPitch, 53.03 * deg);
@@ -1601,7 +1770,7 @@ void main() {
         const offGl = off.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
         const offProg = buildProg(offGl);
         const offLocs = Object.fromEntries(uniformNames.map(n => [n, offGl.getUniformLocation(offProg, n)]));
-        drawFrame(offGl, offProg, offLocs, w, h, glitterPhaseSec, pulseTimeSec, lastOrbital.angles);
+        drawFrame(offGl, offProg, offLocs, w, h, glitterPhaseSec, pulseTimeSec, lastOrbital.angles, lastOrbital.prayerActivity);
         offGl.finish();
         const a = document.createElement('a');
         const slug = currentLoc.name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
@@ -1651,9 +1820,22 @@ void main() {
       }
 
       resize();
-      drawFrame(gl, prog, locs, canvas.width, canvas.height, glitterPhaseSec, pulseTimeSec, lastOrbital.angles);
+      drawFrame(gl, prog, locs, canvas.width, canvas.height, glitterPhaseSec, pulseTimeSec, lastOrbital.angles, lastOrbital.prayerActivity);
       requestAnimationFrame(tick);
     }
+
+    // Expose inspection hook for automated headless testing
+    window.__falakDebug = {
+      setSimEpoch: (ms) => { mode = 'scrub'; simEpochMs = ms; refreshUI(); },
+      setOrbitMode,
+      getState: () => lastOrbital,
+      computePrayerDay: (y, m, d) => computePrayerDay(currentLoc, currentMethod, y, m, d),
+      renderNow: () => {
+        resize();
+        drawFrame(gl, prog, locs, canvas.width, canvas.height, glitterPhaseSec, pulseTimeSec, lastOrbital.angles, lastOrbital.prayerActivity);
+        gl.finish();
+      }
+    };
 
     syncStarTuningUI();
     applySelectedRatio();

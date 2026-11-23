@@ -133,6 +133,7 @@ window.renderOne = (w, h, angles) => {{
   gl.uniform2f(u('uResolution'), w, h);
   gl.uniform1f(u('uTime'), 0.0);
   gl.uniform1f(u('uPulseTime'), 2.2);
+  gl.uniform1f(u('uPrayerActivity'), -1.0);
 
   gl.uniform3f(u('uCamPos'), cfg.camera.position[0], cfg.camera.position[1], cfg.camera.position[2]);
   gl.uniform1f(u('uCamPitch'), cfg.camera.pitchDeg * deg);

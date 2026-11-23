@@ -45,8 +45,9 @@ import kotlin.math.abs
 /**
  * Full-bleed OpenGL ES 3.0 live preview & configuration activity for Falak.
  * Provides a manual worldwide location selector (zero location permissions),
- * a calculation source selector (Jordan Ministry of Awqaf & MWL), tap-to-align
- * prayer rows, a 24-hour orbit scrubber, and one-tap Live Wallpaper activation.
+ * a calculation source selector (Jordan Ministry of Awqaf & MWL), an orbit mode
+ * selector (Prayer Window default & 24-Hour Orbit), tap-to-align prayer rows,
+ * a 24-hour orbit scrubber, and one-tap Live Wallpaper activation.
  */
 class MainActivity : Activity(), SurfaceHolder.Callback {
 
@@ -60,6 +61,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
     private var currentMethod: PrayerMethod = PrayerMethod.DEFAULT
 
     @Volatile
+    private var currentOrbitMode: OrbitMode = OrbitMode.DEFAULT
+
+    @Volatile
+    private var currentAspect: Float = 0.45f
+
+    @Volatile
     private var scrubEpochMs: Long? = null
 
     @Volatile
@@ -70,6 +77,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var livePill: TextView
     private lateinit var locationValueView: TextView
     private lateinit var sourceValueView: TextView
+    private lateinit var orbitModeValueView: TextView
     private lateinit var seekBar: SeekBar
     private val prayerCells = arrayOfNulls<TextView>(5)
     private var updatingSeekBar = false
@@ -99,7 +107,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         val saved = FalakPreferences.load(this)
         currentLocation = saved.location
         currentMethod = saved.method
+        currentOrbitMode = saved.orbitMode
         currentStarfield = saved.starfield
+        currentAspect = resources.displayMetrics.widthPixels.toFloat() /
+            resources.displayMetrics.heightPixels.coerceAtLeast(1).toFloat()
 
         val dp = resources.displayMetrics.density
         val root = FrameLayout(this).apply {
@@ -177,7 +188,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         topRow.addView(livePill)
         dock.addView(topRow)
 
-        // Row 2: Manual Location Selector & Calculation Source Selector pills
+        // Row 2: Manual Location, Calculation Source & Orbit Mode selector pills
         val selectorRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -194,7 +205,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             onClick = { showLocationDialog() }
         )
         locationValueView = locVal
-        locPill.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.15f).apply {
+        locPill.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.05f).apply {
             rightMargin = (6 * dp).toInt()
         }
 
@@ -204,10 +215,21 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             onClick = { showSourceDialog() }
         )
         sourceValueView = srcVal
-        srcPill.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.95f)
+        srcPill.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.00f).apply {
+            rightMargin = (6 * dp).toInt()
+        }
+
+        val (orbitPill, orbitVal) = buildSelectorPill(
+            dp = dp,
+            caption = "ORBIT",
+            onClick = { showOrbitModeDialog() }
+        )
+        orbitModeValueView = orbitVal
+        orbitPill.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.95f)
 
         selectorRow.addView(locPill)
         selectorRow.addView(srcPill)
+        selectorRow.addView(orbitPill)
         dock.addView(selectorRow)
 
         // Row 3: Five prayer schedule cells (tap to align)
@@ -260,10 +282,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
                         val state = PrayerTimesEngine.computeStateForLocalMinutes(
-                            currentLocation,
-                            currentMethod,
-                            currentLocationDate(),
-                            progress.toDouble()
+                            location = currentLocation,
+                            method = currentMethod,
+                            date = currentLocationDate(),
+                            minutesOfDay = progress.toDouble(),
+                            orbitMode = currentOrbitMode,
+                            aspect = currentAspect
                         )
                         scrubEpochMs = state.nowEpochMs
                         glThread?.requestRedraw()
@@ -370,7 +394,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
 
         glThread = FalakGlThread(
             context = applicationContext,
-            angleProvider = { currentOrbitalState().anglesRad },
+            stateProvider = { aspect -> currentOrbitalState(aspect) },
             starfieldProvider = { currentStarfield }
         ).apply { start() }
 
@@ -383,6 +407,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         val saved = FalakPreferences.load(this)
         currentLocation = saved.location
         currentMethod = saved.method
+        currentOrbitMode = saved.orbitMode
         currentStarfield = saved.starfield
         syncStarfieldControls()
         glThread?.setVisible(true)
@@ -406,11 +431,15 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
     override fun surfaceCreated(holder: SurfaceHolder) {
         val rect = holder.surfaceFrame
         if (rect.width() > 0 && rect.height() > 0) {
+            currentAspect = rect.width().toFloat() / rect.height().coerceAtLeast(1).toFloat()
             glThread?.onSurfaceAvailable(holder, rect.width(), rect.height())
         }
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        if (width > 0 && height > 0) {
+            currentAspect = width.toFloat() / height.coerceAtLeast(1).toFloat()
+        }
         glThread?.onSurfaceAvailable(holder, width, height)
     }
 
@@ -422,9 +451,15 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         return Instant.now().atZone(currentLocation.resolveZone()).toLocalDate()
     }
 
-    private fun currentOrbitalState(): PrayerTimesEngine.OrbitalState {
+    private fun currentOrbitalState(aspect: Float = currentAspect): PrayerTimesEngine.OrbitalState {
         val epoch = scrubEpochMs ?: System.currentTimeMillis()
-        return PrayerTimesEngine.computeState(currentLocation, currentMethod, epoch)
+        return PrayerTimesEngine.computeState(
+            location = currentLocation,
+            method = currentMethod,
+            nowEpochMs = epoch,
+            orbitMode = currentOrbitMode,
+            aspect = aspect
+        )
     }
 
     private fun refreshHud() {
@@ -442,6 +477,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
 
         locationValueView.text = "${currentLocation.name} ▾"
         sourceValueView.text = "${currentMethod.shortName} ▾"
+        orbitModeValueView.text = "${currentOrbitMode.shortName} ▾"
 
         for (i in 0 until 5) {
             val label = PrayerTimesEngine.PRAYER_NAMES[i]
@@ -463,7 +499,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             updatingSeekBar = false
         }
 
-        val isAligned = state.anglesRad.any { abs(it) < 0.08f }
+        val isAligned = state.prayerActivity > 0.25f
         if (::previewGlitterPill.isInitialized) {
             previewGlitterPill.alpha = if (isAligned) 1.0f else 0.72f
             previewGlitterPill.text = if (isAligned) "✦ Glitter On" else "✦ Test Glitter"
@@ -515,7 +551,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                 rightMargin = (6 * dp).toInt()
             }
             setOnClickListener {
-                val aligned = currentOrbitalState().anglesRad.any { abs(it) < 0.08f }
+                val aligned = currentOrbitalState().prayerActivity > 0.25f
                 if (aligned && scrubEpochMs != null) {
                     scrubEpochMs = null
                 } else {
@@ -593,7 +629,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             label = "Glitter Speed",
             maxProgress = 300,
             onStartTouch = {
-                val aligned = currentOrbitalState().anglesRad.any { abs(it) < 0.08f }
+                val aligned = currentOrbitalState().prayerActivity > 0.25f
                 if (!aligned) {
                     alignForGlitterPreview()
                     refreshHud()
@@ -728,20 +764,20 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
     ): Pair<LinearLayout, TextView> {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((10 * dp).toInt(), (6 * dp).toInt(), (10 * dp).toInt(), (7 * dp).toInt())
+            setPadding((8.5f * dp).toInt(), (6 * dp).toInt(), (8.5f * dp).toInt(), (7 * dp).toInt())
             background = roundedBox(dp, 13f, 0x1AE6EBF5, 0x2AE6EBF5)
             setOnClickListener { onClick() }
         }
         val capView = TextView(this).apply {
             text = caption
             setTextColor(0x80DCE2F0.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f)
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             letterSpacing = 0.08f
         }
         val valView = TextView(this).apply {
             setTextColor(COLOR_IVORY)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.4f)
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.END
@@ -755,6 +791,96 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         container.addView(capView)
         container.addView(valView)
         return Pair(container, valView)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Orbit Mode Selector Dialog (Prayer Window default & 24-Hour Orbit)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun showOrbitModeDialog() {
+        val dp = resources.displayMetrics.density
+        val container = createDialogSurface(dp)
+
+        container.addView(dialogTitle(dp, "Orbit Mode"))
+        container.addView(dialogSubtitle(dp, "Choose how the five planets traverse their orbits"))
+
+        var dialog: AlertDialog? = null
+
+        for (mode in OrbitMode.values()) {
+            val selected = (mode == currentOrbitMode)
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding((14 * dp).toInt(), (12 * dp).toInt(), (14 * dp).toInt(), (12 * dp).toInt())
+                background = roundedBox(
+                    dp,
+                    14f,
+                    if (selected) 0x26FFF7E9 else 0x12E6EBF5,
+                    if (selected) 0x80FFF7E9.toInt() else 0x22E6EBF5
+                )
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (10 * dp).toInt()
+                }
+                setOnClickListener {
+                    currentOrbitMode = mode
+                    FalakPreferences.saveOrbitMode(this@MainActivity, mode)
+                    glThread?.requestRedraw()
+                    refreshHud()
+                    dialog?.dismiss()
+                }
+            }
+
+            val textCol = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val titleView = TextView(this).apply {
+                text = mode.displayName
+                setTextColor(if (selected) COLOR_IVORY else 0xE6E8ECF5.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            }
+            val descView = TextView(this).apply {
+                text = mode.summary
+                setTextColor(0x9ADCE2F0.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                typeface = Typeface.MONOSPACE
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (2 * dp).toInt()
+                }
+            }
+            textCol.addView(titleView)
+            textCol.addView(descView)
+
+            val radioView = TextView(this).apply {
+                text = if (selected) "●" else "○"
+                setTextColor(if (selected) COLOR_IVORY else 0x66DCE2F0)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                setPadding((10 * dp).toInt(), 0, 0, 0)
+            }
+
+            card.addView(textCol)
+            card.addView(radioView)
+            container.addView(card)
+        }
+
+        val closeBtn = buildGhostButton(dp, "Close") { dialog?.dismiss() }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = (14 * dp).toInt()
+            }
+        }
+        container.addView(closeBtn)
+
+        dialog = showStyledDialog(container)
     }
 
     // ─────────────────────────────────────────────────────────────────────────

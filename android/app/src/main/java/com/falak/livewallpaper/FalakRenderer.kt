@@ -21,6 +21,7 @@ class FalakRenderer(
     private var uResolution = -1
     private var uTime = -1
     private var uPulseTime = -1
+    private var uPrayerActivity = -1
     private var uCamPos = -1
     private var uCamPitch = -1
     private var uCamYaw = -1
@@ -83,7 +84,8 @@ class FalakRenderer(
         timeSeconds: Float,
         pulseTimeSeconds: Float,
         planetAnglesRad: FloatArray,
-        starfield: FalakPreferences.StarfieldSettings = FalakPreferences.StarfieldSettings()
+        starfield: FalakPreferences.StarfieldSettings = FalakPreferences.StarfieldSettings(),
+        prayerActivity: Float = -1.0f
     ) {
         if (program == 0 || width <= 0 || height <= 0) return
 
@@ -93,6 +95,7 @@ class FalakRenderer(
         GLES30.glUniform2f(uResolution, width.toFloat(), height.toFloat())
         GLES30.glUniform1f(uTime, timeSeconds)
         GLES30.glUniform1f(uPulseTime, pulseTimeSeconds)
+        GLES30.glUniform1f(uPrayerActivity, prayerActivity)
 
         GLES30.glUniform3f(uCamPos, config.camPosX, config.camPosY, config.camPosZ)
         GLES30.glUniform1f(uCamPitch, config.camPitchRad)
@@ -181,6 +184,7 @@ class FalakRenderer(
         uResolution = GLES30.glGetUniformLocation(program, "uResolution")
         uTime = GLES30.glGetUniformLocation(program, "uTime")
         uPulseTime = GLES30.glGetUniformLocation(program, "uPulseTime")
+        uPrayerActivity = GLES30.glGetUniformLocation(program, "uPrayerActivity")
         uCamPos = GLES30.glGetUniformLocation(program, "uCamPos")
         uCamPitch = GLES30.glGetUniformLocation(program, "uCamPitch")
         uCamYaw = GLES30.glGetUniformLocation(program, "uCamYaw")

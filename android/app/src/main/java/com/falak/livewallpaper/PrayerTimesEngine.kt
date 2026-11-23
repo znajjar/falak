@@ -12,6 +12,7 @@ import kotlin.math.asin
 import kotlin.math.atan
 import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.round
 import kotlin.math.sin
@@ -21,11 +22,13 @@ import kotlin.math.tan
  * Worldwide offline astronomical Islamic prayer-time calculator built on the high-precision
  * Jean Meeus / NOAA solar ephemeris. Supports arbitrary latitude, longitude, IANA timezones
  * (including DST transitions and International Date Line offsets), selectable calculation
- * sources (Jordan Ministry of Awqaf, MWL), and continuous angle-based high-latitude handling.
+ * sources (Jordan Ministry of Awqaf, MWL), continuous angle-based high-latitude handling,
+ * and dual operating modes:
  *
- * Computes consecutive daily prayer instants so each of the five planets completes one
- * continuous 360° orbit per ~24h prayer cycle with zero midnight jump, crossing the center
- * meridian (angle = 0 rad) at exact prayer time.
+ * - [OrbitMode.PRAYER_WINDOW] (default): Planets cross dead center at exact prayer time with
+ *   Fajr disappearing at Sunrise (constant velocity) and the remaining prayers splitting the
+ *   inter-prayer intervals cleanly in half with edge-to-edge handoffs.
+ * - [OrbitMode.ORBIT_24H]: Continuous 360° ~24h astronomical cycle with zero midnight jump.
  */
 object PrayerTimesEngine {
 
@@ -34,30 +37,42 @@ object PrayerTimesEngine {
     private const val MS_PER_HOUR = 3_600_000.0
     private const val MS_PER_DAY = 86_400_000.0
     private const val UNIX_EPOCH_JD = 2440587.5
+    private const val DEFAULT_ASPECT = 0.45f
+    private const val PRAYER_ACTIVITY_SIGMA_MIN = 10.5
+    private const val PRAYER_ANIMATION_WINDOW_MIN = 25.0
 
     val PRAYER_NAMES = arrayOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha")
 
     data class PrayerDay(
         val date: LocalDate,
         val instants: LongArray,
-        val formattedTimes: Array<String>
+        val formattedTimes: Array<String>,
+        val sunriseInstant: Long,
+        val sunriseFormatted: String
     )
 
     data class OrbitalState(
         val location: PrayerLocation,
         val method: PrayerMethod,
+        val orbitMode: OrbitMode,
         val anglesRad: FloatArray,
         val today: PrayerDay,
         val nextPrayerIndex: Int,
         val minutesToNext: Long,
         val localMinutesOfDay: Double,
-        val nowEpochMs: Long
+        val nowEpochMs: Long,
+        val prayerActivity: Float,
+        val isNearPrayerWindow: Boolean
     )
 
+    @JvmOverloads
     fun computeState(
         location: PrayerLocation,
         method: PrayerMethod,
-        nowEpochMs: Long = System.currentTimeMillis()
+        nowEpochMs: Long = System.currentTimeMillis(),
+        orbitMode: OrbitMode = OrbitMode.DEFAULT,
+        aspect: Float = DEFAULT_ASPECT,
+        config: FalakConfig = FalakConfig()
     ): OrbitalState {
         val zone = location.resolveZone()
         val zdt = Instant.ofEpochMilli(nowEpochMs).atZone(zone)
@@ -70,45 +85,63 @@ object PrayerTimesEngine {
         var prev2: PrayerDay? = null
         var next2: PrayerDay? = null
 
-        val angles = FloatArray(5)
-        for (i in 0 until 5) {
-            val t0: Long
-            val t1: Long
-            when {
-                nowEpochMs < prev.instants[i] -> {
-                    val p2 = prev2 ?: computePrayerDay(location, method, date.minusDays(2)).also { prev2 = it }
-                    t0 = p2.instants[i]
-                    t1 = prev.instants[i]
-                }
-                nowEpochMs < today.instants[i] -> {
-                    t0 = prev.instants[i]
-                    t1 = today.instants[i]
-                }
-                nowEpochMs < next.instants[i] -> {
-                    t0 = today.instants[i]
-                    t1 = next.instants[i]
-                }
-                else -> {
-                    val n2 = next2 ?: computePrayerDay(location, method, date.plusDays(2)).also { next2 = it }
-                    t0 = next.instants[i]
-                    t1 = n2.instants[i]
+        val angles = when (orbitMode) {
+            OrbitMode.ORBIT_24H -> {
+                FloatArray(5) { i ->
+                    val t0: Long
+                    val t1: Long
+                    when {
+                        nowEpochMs < prev.instants[i] -> {
+                            val p2 = prev2 ?: computePrayerDay(location, method, date.minusDays(2)).also { prev2 = it }
+                            t0 = p2.instants[i]
+                            t1 = prev.instants[i]
+                        }
+                        nowEpochMs < today.instants[i] -> {
+                            t0 = prev.instants[i]
+                            t1 = today.instants[i]
+                        }
+                        nowEpochMs < next.instants[i] -> {
+                            t0 = today.instants[i]
+                            t1 = next.instants[i]
+                        }
+                        else -> {
+                            val n2 = next2 ?: computePrayerDay(location, method, date.plusDays(2)).also { next2 = it }
+                            t0 = next.instants[i]
+                            t1 = n2.instants[i]
+                        }
+                    }
+                    val span = (t1 - t0).coerceAtLeast(1L).toDouble()
+                    var phase = (nowEpochMs - t0).toDouble() / span
+                    phase = ((phase % 1.0) + 1.0) % 1.0
+                    if (phase >= 0.5) phase -= 1.0
+                    (phase * 2.0 * PI).toFloat()
                 }
             }
-            val span = (t1 - t0).coerceAtLeast(1L).toDouble()
-            var phase = (nowEpochMs - t0).toDouble() / span
-            phase = ((phase % 1.0) + 1.0) % 1.0
-            if (phase >= 0.5) phase -= 1.0
-            angles[i] = (phase * 2.0 * PI).toFloat()
+
+            OrbitMode.PRAYER_WINDOW -> {
+                val n2 = next2 ?: computePrayerDay(location, method, date.plusDays(2)).also { next2 = it }
+                val edgeAngles = computeEdgeAnglesRad(aspect, config)
+                computePrayerWindowAngles(
+                    nowEpochMs = nowEpochMs,
+                    days = arrayOf(prev, today, next, n2),
+                    edgeAnglesRad = edgeAngles
+                )
+            }
         }
 
-        // Find the earliest upcoming prayer instant across yesterday (e.g. post-midnight Isha),
-        // today, and tomorrow.
+        // Find the earliest upcoming prayer instant and nearest prayer time (for exact time-based
+        // prayer glow/glitter/pulsation and LTPO OLED 30 FPS window across both operating modes).
         var nextIdx = 0
         var nextMs = Long.MAX_VALUE
+        var minDeltaMs = Long.MAX_VALUE
         val candidateDays = arrayOf(prev, today, next)
         for (day in candidateDays) {
             for (i in 0 until 5) {
                 val t = day.instants[i]
+                val delta = abs(nowEpochMs - t)
+                if (delta < minDeltaMs) {
+                    minDeltaMs = delta
+                }
                 if (t >= nowEpochMs && t < nextMs) {
                     nextMs = t
                     nextIdx = i
@@ -119,7 +152,14 @@ object PrayerTimesEngine {
             val n2 = next2 ?: computePrayerDay(location, method, date.plusDays(2))
             nextIdx = 0
             nextMs = n2.instants[0]
+            val delta = abs(nowEpochMs - nextMs)
+            if (delta < minDeltaMs) minDeltaMs = delta
         }
+
+        val minDeltaMin = minDeltaMs.toDouble() / MS_PER_MIN.toDouble()
+        val norm = minDeltaMin / PRAYER_ACTIVITY_SIGMA_MIN
+        val prayerActivity = exp(-(norm * norm)).toFloat().coerceIn(0f, 1f)
+        val isNearPrayer = minDeltaMin <= PRAYER_ANIMATION_WINDOW_MIN
 
         val minutesToNext = ((nextMs - nowEpochMs).coerceAtLeast(0L) + 30_000L) / MS_PER_MIN
         val localMin = zdt.hour * 60.0 + zdt.minute + zdt.second / 60.0
@@ -127,20 +167,27 @@ object PrayerTimesEngine {
         return OrbitalState(
             location = location,
             method = method,
+            orbitMode = orbitMode,
             anglesRad = angles,
             today = today,
             nextPrayerIndex = nextIdx,
             minutesToNext = minutesToNext,
             localMinutesOfDay = localMin,
-            nowEpochMs = nowEpochMs
+            nowEpochMs = nowEpochMs,
+            prayerActivity = prayerActivity,
+            isNearPrayerWindow = isNearPrayer
         )
     }
 
+    @JvmOverloads
     fun computeStateForLocalMinutes(
         location: PrayerLocation,
         method: PrayerMethod,
         date: LocalDate,
-        minutesOfDay: Double
+        minutesOfDay: Double,
+        orbitMode: OrbitMode = OrbitMode.DEFAULT,
+        aspect: Float = DEFAULT_ASPECT,
+        config: FalakConfig = FalakConfig()
     ): OrbitalState {
         val zone = location.resolveZone()
         val clamped = minutesOfDay.coerceIn(0.0, 1439.99)
@@ -149,7 +196,134 @@ object PrayerTimesEngine {
         val m = ((totalSec % 3600) / 60).coerceIn(0, 59)
         val s = (totalSec % 60).coerceIn(0, 59)
         val epochMs = date.atTime(h, m, s).atZone(zone).toInstant().toEpochMilli()
-        return computeState(location, method, epochMs)
+        return computeState(location, method, epochMs, orbitMode, aspect, config)
+    }
+
+    /**
+     * Computes exact pixel-accurate screen-edge exit angles (rad) for each of the 5 prayer orbits
+     * for any surface aspect ratio (23:9 narrow phones through 5:6 foldables), matching
+     * [falak_frag.glsl]'s exact 3D perspective frustum (right and bottom view planes).
+     */
+    fun computeEdgeAnglesRad(aspect: Float, config: FalakConfig = FalakConfig()): FloatArray {
+        val safeAspect = aspect.coerceIn(0.30f, 1.20f).toDouble()
+        val halfW = 0.5 * safeAspect
+        val focal = 0.5 / tan(0.5 * config.fovYRad.toDouble())
+        val cp = cos(config.camPitchRad.toDouble())
+        val sp = sin(config.camPitchRad.toDouble())
+        val camY = config.camPosY.toDouble()
+        val camZ = config.camPosZ.toDouble()
+
+        // Camera basis (yaw = 0): right=(1,0,0), fwd=(0,sp,-cp), up=(0,cp,sp)
+        // Outward unit normal of right frustum plane (ndc.x = +halfW): normalize(focal*right - halfW*fwd)
+        val rNxRaw = focal
+        val rNyRaw = -halfW * sp
+        val rNzRaw = halfW * cp
+        val rLen = kotlin.math.sqrt(rNxRaw * rNxRaw + rNyRaw * rNyRaw + rNzRaw * rNzRaw)
+        val rNx = rNxRaw / rLen
+        val rNy = rNyRaw / rLen
+        val rNz = rNzRaw / rLen
+
+        // Outward unit normal of bottom frustum plane (ndc.y = -0.5): normalize(-focal*up - 0.5*fwd)
+        val bNyRaw = -focal * cp - 0.5 * sp
+        val bNzRaw = -focal * sp + 0.5 * cp
+        val bLen = kotlin.math.sqrt(bNyRaw * bNyRaw + bNzRaw * bNzRaw)
+        val bNy = bNyRaw / bLen
+        val bNz = bNzRaw / bLen
+
+        return FloatArray(5) { idx ->
+            val orbitR = config.planetOrbitRs[idx].toDouble()
+            val padR = config.planetRadii[idx].toDouble() * 1.08
+            var lo = 0.0
+            var hi = PI * 0.92
+            for (step in 0 until 28) {
+                val mid = 0.5 * (lo + hi)
+                val px = orbitR * sin(mid)
+                val pz = orbitR * cos(mid)
+                val vx = px
+                val vy = -camY
+                val vz = pz - camZ
+                val zCam = vy * sp - vz * cp
+                val dRight = vx * rNx + vy * rNy + vz * rNz
+                val dBottom = vy * bNy + vz * bNz
+                if (zCam > 0.01 && dRight < padR && dBottom < padR) {
+                    lo = mid
+                } else {
+                    hi = mid
+                }
+            }
+            hi.toFloat()
+        }
+    }
+
+    /**
+     * Prayer-Window orbital mapping:
+     * - Fajr (0): constant velocity across screen, centered at Fajr, exits cleanly at Sunrise.
+     * - Dhuhr (1): constant velocity (half of Dhuhr→Asr before & after Dhuhr), hands off to Asr.
+     * - Asr (2): enters at midpoint(Dhuhr, Asr), centered at Asr, hands off at midpoint(Asr, Maghrib).
+     * - Maghrib (3): enters at midpoint(Asr, Maghrib), centered at Maghrib, hands off at midpoint(Maghrib, Isha).
+     * - Isha (4): enters at midpoint(Maghrib, Isha), centered at Isha, exits at midpoint(Isha, NextFajr).
+     * A 4-minute off-screen wake taper beyond ±edge keeps orbital trails silky-smooth with zero pop
+     * while the planet sphere itself enters at exact enterMs and exits at exact exitMs.
+     */
+    private fun computePrayerWindowAngles(
+        nowEpochMs: Long,
+        days: Array<PrayerDay>, // [prev, today, next, next2]
+        edgeAnglesRad: FloatArray
+    ): FloatArray {
+        val wakeFadeMs = 4L * MS_PER_MIN
+        val wakeFadeRad = 0.55
+        val angles = FloatArray(5) { PI.toFloat() }
+        for (i in 0 until 5) {
+            val edge = edgeAnglesRad[i].toDouble()
+            for (dIdx in 0 until 3) {
+                val d = days[dIdx]
+                val dNext = days[dIdx + 1]
+                val pMs = d.instants[i]
+                val enterMs: Long
+                val exitMs: Long
+                when (i) {
+                    0 -> { // Fajr: symmetric constant velocity, disappears at exact Sunrise
+                        exitMs = d.sunriseInstant.coerceAtLeast(pMs + MS_PER_MIN)
+                        enterMs = pMs - (exitMs - pMs)
+                    }
+                    1 -> { // Dhuhr: symmetric constant velocity, hands off to Asr at midpoint
+                        val half = ((d.instants[2] - d.instants[1]) / 2L).coerceAtLeast(MS_PER_MIN)
+                        enterMs = pMs - half
+                        exitMs = pMs + half
+                    }
+                    2 -> { // Asr: handoff from Dhuhr -> handoff to Maghrib
+                        enterMs = ((d.instants[1] + d.instants[2]) / 2L).coerceAtMost(pMs - MS_PER_MIN)
+                        exitMs = ((d.instants[2] + d.instants[3]) / 2L).coerceAtLeast(pMs + MS_PER_MIN)
+                    }
+                    3 -> { // Maghrib: handoff from Asr -> handoff to Isha
+                        enterMs = ((d.instants[2] + d.instants[3]) / 2L).coerceAtMost(pMs - MS_PER_MIN)
+                        exitMs = ((d.instants[3] + d.instants[4]) / 2L).coerceAtLeast(pMs + MS_PER_MIN)
+                    }
+                    else -> { // Isha: handoff from Maghrib -> exits at half-night (midpoint to next Fajr)
+                        enterMs = ((d.instants[3] + d.instants[4]) / 2L).coerceAtMost(pMs - MS_PER_MIN)
+                        exitMs = ((d.instants[4] + dNext.instants[0]) / 2L).coerceAtLeast(pMs + MS_PER_MIN)
+                    }
+                }
+                if (nowEpochMs in enterMs..exitMs) {
+                    val frac = if (nowEpochMs <= pMs) {
+                        (nowEpochMs - pMs).toDouble() / (pMs - enterMs).coerceAtLeast(1L).toDouble()
+                    } else {
+                        (nowEpochMs - pMs).toDouble() / (exitMs - pMs).coerceAtLeast(1L).toDouble()
+                    }
+                    angles[i] = (frac * edge).toFloat()
+                    break
+                } else if (nowEpochMs in (enterMs - wakeFadeMs) until enterMs) {
+                    val u = (enterMs - nowEpochMs).toDouble() / wakeFadeMs.toDouble()
+                    angles[i] = (-(edge + wakeFadeRad * u)).coerceAtLeast(-PI + 0.01).toFloat()
+                    break
+                } else if (nowEpochMs in (exitMs + 1L)..(exitMs + wakeFadeMs)) {
+                    val u = (nowEpochMs - exitMs).toDouble() / wakeFadeMs.toDouble()
+                    angles[i] = (edge + wakeFadeRad * u).coerceAtMost(PI - 0.01).toFloat()
+                    break
+                }
+            }
+        }
+        return angles
     }
 
     fun computePrayerDay(
@@ -285,7 +459,17 @@ object PrayerTimesEngine {
         val formatted = Array(5) { idx ->
             formatInstant(instants[idx], zone)
         }
-        return PrayerDay(date = date, instants = instants, formattedTimes = formatted)
+        val sunriseRawMs = utcMidnightMs + sunriseUtc * MS_PER_HOUR
+        val sunriseMin = floor(sunriseRawMs / MS_PER_MIN.toDouble() + 0.5).toLong()
+        val sunriseInstant = (sunriseMin * MS_PER_MIN).coerceAtLeast(instants[0] + MS_PER_MIN)
+        val sunriseFormatted = formatInstant(sunriseInstant, zone)
+        return PrayerDay(
+            date = date,
+            instants = instants,
+            formattedTimes = formatted,
+            sunriseInstant = sunriseInstant,
+            sunriseFormatted = sunriseFormatted
+        )
     }
 
     fun formatInstant(epochMs: Long, zone: ZoneId): String {

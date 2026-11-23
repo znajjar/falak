@@ -22,6 +22,7 @@ object FalakPreferences {
     private const val KEY_STAR_SIZE = "star_size_scale"
     private const val KEY_STAR_DENSITY = "star_density_scale"
     private const val KEY_GLITTER_SPEED = "glitter_speed"
+    private const val KEY_ORBIT_MODE = "orbit_mode"
 
     const val DEFAULT_STAR_SIZE = 1.0f
     const val DEFAULT_STAR_DENSITY = 1.0f
@@ -43,7 +44,8 @@ object FalakPreferences {
     data class Settings(
         val location: PrayerLocation,
         val method: PrayerMethod,
-        val starfield: StarfieldSettings = StarfieldSettings()
+        val starfield: StarfieldSettings = StarfieldSettings(),
+        val orbitMode: OrbitMode = OrbitMode.DEFAULT
     )
 
     private fun prefs(context: Context): SharedPreferences {
@@ -53,6 +55,7 @@ object FalakPreferences {
     fun load(context: Context): Settings {
         val sp = prefs(context)
         val method = PrayerMethod.fromId(sp.getString(KEY_METHOD_ID, null))
+        val orbitMode = OrbitMode.fromId(sp.getString(KEY_ORBIT_MODE, null))
 
         val isCustom = sp.getBoolean(KEY_LOC_CUSTOM, false)
         val savedId = sp.getString(KEY_LOC_ID, null)
@@ -89,12 +92,23 @@ object FalakPreferences {
                 .coerceIn(MIN_GLITTER_SPEED, MAX_GLITTER_SPEED)
         )
 
-        return Settings(location = location, method = method, starfield = starfield)
+        return Settings(
+            location = location,
+            method = method,
+            starfield = starfield,
+            orbitMode = orbitMode
+        )
     }
 
     fun saveMethod(context: Context, method: PrayerMethod) {
         prefs(context).edit()
             .putString(KEY_METHOD_ID, method.id)
+            .apply()
+    }
+
+    fun saveOrbitMode(context: Context, mode: OrbitMode) {
+        prefs(context).edit()
+            .putString(KEY_ORBIT_MODE, mode.id)
             .apply()
     }
 

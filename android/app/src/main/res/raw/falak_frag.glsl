@@ -1,7 +1,7 @@
 #version 300 es
 precision highp float;
 
-// Falak — Celestial Prayer-Time Orbital Shader (v1.1.0)
+// Falak — Celestial Prayer-Time Orbital Shader (v1.3.0)
 // Portable GLSL ES 3.00 (Android OpenGL ES 3.0 + WebGL2).
 //
 // Responsive design for any vertical phone screen size and aspect ratio (16:9 to 22:9+ & foldables),
@@ -20,6 +20,7 @@ out vec4 fragColor;
 uniform vec2 uResolution;
 uniform float uTime;
 uniform float uPulseTime;
+uniform float uPrayerActivity; // >= 0: exact time-based prayer activity in [0,1]; < 0: angle fallback
 
 // Camera
 uniform vec3 uCamPos;
@@ -126,6 +127,9 @@ float filmGrain(vec2 fragCoord) {
 // Compute prayer-time proximity in [0, 1] across all 5 planets.
 // Peaks at 1.0 when any planet crosses center meridian (0 deg), smoothly tapering over ~15 min.
 float computePrayerActivity() {
+    if (uPrayerActivity >= 0.0) {
+        return clamp(uPrayerActivity, 0.0, 1.0);
+    }
     float prayerActivity = 0.0;
     for (int i = 0; i < 5; i++) {
         float a = abs(uPlanetAngles[i]);

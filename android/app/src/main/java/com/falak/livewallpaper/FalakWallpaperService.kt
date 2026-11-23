@@ -34,9 +34,14 @@ class FalakWallpaperService : WallpaperService() {
             FalakPreferences.registerListener(applicationContext, prefsListener)
             glThread = FalakGlThread(
                 context = applicationContext,
-                angleProvider = {
+                stateProvider = { aspect ->
                     val s = currentSettings
-                    PrayerTimesEngine.computeState(s.location, s.method).anglesRad
+                    PrayerTimesEngine.computeState(
+                        location = s.location,
+                        method = s.method,
+                        orbitMode = s.orbitMode,
+                        aspect = aspect
+                    )
                 },
                 starfieldProvider = { currentSettings.starfield }
             ).apply { start() }

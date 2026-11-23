@@ -17,9 +17,15 @@ import android.view.SurfaceHolder
 class FalakGlThread(
     private val context: Context,
     private val config: FalakConfig = FalakConfig(),
-    private val angleProvider: () -> FloatArray = {
+    private val stateProvider: (Float) -> PrayerTimesEngine.OrbitalState = { aspect ->
         val settings = FalakPreferences.load(context)
-        PrayerTimesEngine.computeState(settings.location, settings.method).anglesRad
+        PrayerTimesEngine.computeState(
+            location = settings.location,
+            method = settings.method,
+            orbitMode = settings.orbitMode,
+            aspect = aspect,
+            config = config
+        )
     },
     private val starfieldProvider: () -> FalakPreferences.StarfieldSettings = {
         FalakPreferences.load(context).starfield
@@ -202,9 +208,10 @@ class FalakGlThread(
                     lastPhaseMs = nowMs
                     lastDrawMs = nowMs
 
-                    val angles = angleProvider()
+                    val aspect = w.toFloat() / h.coerceAtLeast(1).toFloat()
+                    val orbitalState = stateProvider(aspect)
                     val starfield = starfieldProvider()
-                    val isNearPrayer = angles.any { kotlin.math.abs(it) < config.prayerSprinkleAngleRad }
+                    val isNearPrayer = orbitalState.isNearPrayerWindow
                     if (isNearPrayer) {
                         pulseTimeSec = (pulseTimeSec + dtSec) % 100_000.0
                         if (starfield.glitterSpeed > 0.001f && starfield.densityScale > 0.001f) {
@@ -214,7 +221,15 @@ class FalakGlThread(
                     synchronized(lock) {
                         prayerSprinkleActive = isNearPrayer
                     }
-                    renderer?.draw(w, h, glitterPhaseSec.toFloat(), pulseTimeSec.toFloat(), angles, starfield)
+                    renderer?.draw(
+                        width = w,
+                        height = h,
+                        timeSeconds = glitterPhaseSec.toFloat(),
+                        pulseTimeSeconds = pulseTimeSec.toFloat(),
+                        planetAnglesRad = orbitalState.anglesRad,
+                        starfield = starfield,
+                        prayerActivity = orbitalState.prayerActivity
+                    )
                     if (!EGL14.eglSwapBuffers(eglDisplay, eglSurface)) {
                         val err = EGL14.eglGetError()
                         if (err == EGL14.EGL_BAD_SURFACE || err == EGL14.EGL_CONTEXT_LOST) {
