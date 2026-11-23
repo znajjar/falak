@@ -3,7 +3,7 @@
 An original OpenGL ES 3.0 Android live wallpaper that scales cleanly to **any vertical phone screen size and aspect ratio** (`16:9` through `22:9+` and portrait foldables) and is optimized for **LTPO OLED** displays, visualizing daily Islamic prayer times anywhere in the world as five orbiting planets around a rising star.
 
 <p align="center">
-  <img src="renders/falak_asr_preview.gif" alt="Falak Live Wallpaper — Asr Prayer Alignment (Amman)" width="300" />
+  <img src="renders/falak_asr_preview.gif" alt="Falak Live Wallpaper — Asr Prayer Alignment (Amman)" width="760" />
   <br />
   <sub><em>Asr prayer alignment (15:14, Amman) — planet crossing the center meridian as the starfield gently sprinkles</em></sub>
 </p>
