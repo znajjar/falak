@@ -5,6 +5,29 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- Sparse celestial stars framing the calligraphy strictly within the 66dp safe zone -->
+    <path
+        android:fillColor="#FFFFF7E9"
+        android:pathData="M36.00,29.40 Q36.68,31.82 39.10,32.50 Q36.68,33.18 36.00,35.60 Q35.32,33.18 32.90,32.50 Q35.32,31.82 36.00,29.40 Z" />
+    <path
+        android:fillColor="#FFB2B7C4"
+        android:pathData="M71.50,27.20 Q72.01,28.99 73.80,29.50 Q72.01,30.01 71.50,31.80 Q70.99,30.01 69.20,29.50 Q70.99,28.99 71.50,27.20 Z" />
+    <path
+        android:fillColor="#FFFFF7E9"
+        android:pathData="M70.50,73.80 Q71.09,75.91 73.20,76.50 Q71.09,77.09 70.50,79.20 Q69.91,77.09 67.80,76.50 Q69.91,75.91 70.50,73.80 Z" />
+    <path
+        android:fillColor="#FFB2B7C4"
+        android:pathData="M45.05,26.80 a0.95,0.95 0 1,0 1.90,0 a0.95,0.95 0 1,0 -1.90,0 z" />
+    <path
+        android:fillColor="#FF6D7384"
+        android:pathData="M26.65,45.50 a0.85,0.85 0 1,0 1.70,0 a0.85,0.85 0 1,0 -1.70,0 z" />
+    <path
+        android:fillColor="#FFB2B7C4"
+        android:pathData="M35.50,76.50 a1.00,1.00 0 1,0 2.00,0 a1.00,1.00 0 1,0 -2.00,0 z" />
+    <path
+        android:fillColor="#FF6D7384"
+        android:pathData="M79.65,65.50 a0.85,0.85 0 1,0 1.70,0 a0.85,0.85 0 1,0 -1.70,0 z" />
+
     <!-- Classical Mushakkal Thuluth calligraphy of Falak (فَلَك) -->
     <path
         android:fillColor="#FFFFF7E9"
