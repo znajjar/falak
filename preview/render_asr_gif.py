@@ -169,6 +169,7 @@ gl.uniform1f(u('uGlitterSpeed'), cfg.atmosphere.glitterSpeed);
 
 window.renderFrame = (tSec, angles) => {{
   gl.uniform1f(u('uTime'), tSec);
+  gl.uniform1f(u('uPulseTime'), tSec);
   gl.uniform1fv(u('uPlanetAngles'), new Float32Array(angles));
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.finish();

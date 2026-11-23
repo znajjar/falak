@@ -19,6 +19,7 @@ out vec4 fragColor;
 
 uniform vec2 uResolution;
 uniform float uTime;
+uniform float uPulseTime;
 
 // Camera
 uniform vec3 uCamPos;
@@ -132,6 +133,17 @@ float computePrayerActivity() {
         prayerActivity = max(prayerActivity, exp(-pow(max(a / 0.046, 1e-5), 2.0)));
     }
     return prayerActivity;
+}
+
+// Smooth meditative star breath (~4.4s cycle) active during prayer time.
+// Returns vec2(starPulse, breathSigned): outside prayer time == (1.0, 0.0).
+vec2 computeStarPulse(float prayerFactor) {
+    if (prayerFactor <= 0.001) return vec2(1.0, 0.0);
+    float wave = 0.5 + 0.5 * sin(uPulseTime * 1.42 - 0.5 * PI);
+    float eased = wave * wave * (3.0 - 2.0 * wave);
+    float signedWave = eased * 2.0 - 1.0;
+    float pulse = mix(1.0, mix(0.86, 1.34, eased), prayerFactor);
+    return vec2(pulse, signedWave * prayerFactor);
 }
 
 // Responsive star radius (in viewport-height units) across any vertical aspect ratio
@@ -351,8 +363,8 @@ float wrapAngleDiff(float a, float b) {
     return mod(d + PI, 2.0 * PI) - PI;
 }
 
-// Evaluate ONLY the 5 active prayer orbits + subtle center meridian astrolabe pips
-vec4 evalOrbitalPlane(vec3 ro, vec3 rd, vec3 rdDx, vec3 rdDy, float resScale) {
+// Evaluate ONLY the 5 active prayer orbits + subtle center alignment dots
+vec4 evalOrbitalPlane(vec3 ro, vec3 rd, vec3 rdDx, vec3 rdDy, float resScale, float breathSigned) {
     float t = intersectOrbitalPlane(ro, rd);
     if (t <= 0.0) return vec4(0.0, 0.0, 0.0, 1e9);
 
@@ -373,6 +385,7 @@ vec4 evalOrbitalPlane(vec3 ro, vec3 rd, vec3 rdDx, vec3 rdDy, float resScale) {
     float halfWidthPx = max(0.40, uRingWidth * resScale * 0.48);
     float screenX = abs(vUv.x * 2.0 - 1.0);
     float edgeAtten = 1.0 - 0.36 * smoothstep(0.14, 1.04, screenX);
+    float orbitPulse = 1.0 + 0.16 * breathSigned;
 
     vec3 accum = vec3(0.0);
 
@@ -395,10 +408,10 @@ vec4 evalOrbitalPlane(vec3 ro, vec3 rd, vec3 rdDx, vec3 rdDy, float resScale) {
                 float planetWake = exp(-pow(max(abs(angDelta) / trailWidth, 1e-5), 1.8)) * 0.15;
 
                 float baseInt = 0.22 * depthWeight * edgeAtten;
-                float activeLift = alignBoost * 0.16 * edgeAtten;
+                float activeLift = alignBoost * 0.16 * edgeAtten * orbitPulse;
 
                 vec3 ringCol = mix(ORBIT_TINT, ACTIVE_TINT, clamp(alignBoost * 0.75 + planetWake * 2.5, 0.0, 1.0));
-                accum += ringCol * aa * (baseInt + activeLift + planetWake * edgeAtten) * uRingBrightness;
+                accum += ringCol * aa * (baseInt + activeLift + planetWake * edgeAtten * orbitPulse) * uRingBrightness;
             }
         }
 
@@ -407,22 +420,25 @@ vec4 evalOrbitalPlane(vec3 ro, vec3 rd, vec3 rdDx, vec3 rdDy, float resScale) {
         if (pxFromPip < pipRadPx + 1.5) {
             float pipMask = 1.0 - smoothstep(pipRadPx * 0.45, pipRadPx + 0.85, pxFromPip);
             vec3 pipCol = mix(ORBIT_TINT, ACTIVE_TINT, alignBoost);
-            accum += pipCol * pipMask * (0.16 + 0.26 * alignBoost) * uRingBrightness;
+            accum += pipCol * pipMask * (0.16 + 0.26 * alignBoost * orbitPulse) * uRingBrightness;
         }
     }
 
     return vec4(accum, t);
 }
 
-// Evaluate a single sculpted 3D planet sphere with subtle mineral surface shading & warm backlit rim
+// Evaluate a single sculpted 3D planet sphere with subtle mineral surface shading,
+// warm backlit rim, and physically-coupled reflection of the star's prayer-time pulsation
 vec4 evalPlanet(
     vec3 ro,
     vec3 rd,
     vec3 planetPos,
     float planetR,
+    float orbitR,
     vec3 sunPos,
     float focal,
     float alignBoost,
+    float breathSigned,
     float planetSeed,
     out float tHit
 ) {
@@ -468,19 +484,31 @@ vec4 evalPlanet(
     float surfaceTex = planetSurfaceFbm(N * 3.4 + vec3(planetSeed * 5.7, planetSeed * 3.1, 1.9));
     float albedoMod = mix(0.86, 1.12, surfaceTex);
 
+    // Distance-weighted irradiance coupling: inner & aligned planets catch slightly stronger radiance
+    float proxWeight = mix(1.0, 0.76, clamp((orbitR - 13.5) / 13.2, 0.0, 1.0));
+    float reflWeight = clamp(proxWeight + 0.25 * alignBoost, 0.0, 1.15);
+    float diffGain = max(0.55, 1.0 + 0.42 * breathSigned * reflWeight);
+    float rimGain  = max(0.55, 1.0 + 0.56 * breathSigned * reflWeight);
+    float peakGain = max(0.75, 1.0 + 0.24 * breathSigned * reflWeight);
+
     float wrap = max(uTerminatorWrap, 0.01);
     float wrapped = clamp((ndotl + wrap) / (1.0 + wrap), 0.0, 1.0);
-    float rawDiffuse = (wrapped > 0.0) ? pow(wrapped, 1.72) * uPlanetDiffuse * albedoMod : 0.0;
+    float rawDiffuse = (wrapped > 0.0) ? pow(wrapped, 1.72) * uPlanetDiffuse * albedoMod * diffGain : 0.0;
 
     float fresnel = pow(max(1.0 - ndotv, 1e-5), 2.8);
     float sunHemisphere = smoothstep(-0.30, 0.30, ndotl);
-    float rim = fresnel * sunHemisphere * (uRimStrength + 0.14 * alignBoost);
+    float rim = fresnel * sunHemisphere * (uRimStrength + 0.14 * alignBoost) * rimGain;
 
-    float litPeak = 0.54 + 0.16 * alignBoost;
+    float litPeak = (0.54 + 0.16 * alignBoost) * peakGain;
     float shapedLit = litPeak * (1.0 - exp(-(rawDiffuse + rim) * 1.65));
 
-    vec3 litTint = mix(vec3(0.90, 0.90, 0.92), STAR_TINT, clamp(wrapped * 0.75 + rim * 1.4, 0.0, 1.0));
+    float warmLift = clamp(wrapped * 0.75 + rim * 1.4 + 0.20 * max(breathSigned, 0.0) * reflWeight, 0.0, 1.0);
+    vec3 litTint = mix(vec3(0.90, 0.90, 0.92), STAR_TINT, warmLift);
     vec3 rgb = PLANET_NIGHT * mix(0.92, 1.08, surfaceTex) + litTint * shapedLit;
+
+    // Soft warm radiance spill across the sun-facing terminator at star pulse peak
+    float radianceSpill = max(breathSigned, 0.0) * smoothstep(-0.55, 0.25, ndotl) * 0.045 * reflWeight;
+    rgb += STAR_TINT * radianceSpill;
 
     float nightLimb = pow(max(1.0 - ndotv, 1e-5), 3.4) * (1.0 - sunHemisphere) * 0.045;
     rgb += vec3(0.75, 0.80, 0.90) * nightLimb;
@@ -489,7 +517,7 @@ vec4 evalPlanet(
 }
 
 // Rising bottom star: responsive diameter (0.50 W on standard vertical phones, capped safely on wide ratios)
-// pinned so exactly 35% of the star disc rises above the bottom edge + rich 1.5x atmospheric corona
+// pinned so exactly 35% of the star disc rises above the bottom edge + rich 1.5x pulsating corona
 vec3 evalSun(
     vec3 ro,
     vec3 sunPos,
@@ -499,6 +527,8 @@ vec3 evalSun(
     vec3 camUp,
     vec3 camFwd,
     float rCoreH,
+    float starPulse,
+    float breathSigned,
     float nearestPlanetAlpha,
     float nearestPlanetT
 ) {
@@ -514,20 +544,22 @@ vec3 evalSun(
     float coreBody = 1.0 - smoothstep(0.93, 1.03, rUnit);
     float limbGrad = smoothstep(0.55, 0.98, rUnit);
     vec3 coreCol = mix(vec3(1.0, 0.995, 0.985), STAR_TINT, limbGrad);
+    float coreGain = 1.05 * (1.0 + 0.05 * breathSigned);
 
     float dEdgeUnit = max(rUnit - 1.0, 0.0);
-    // Glow intensity scales cleanly with uSunGlow (1.5x default) while keeping limb rolloff silky
-    float glowScale = max(uSunGlow, 0.0);
-    float spread = mix(1.0, 1.24, clamp(glowScale - 1.0, 0.0, 1.0));
+    // Glow intensity & corona reach breathe gently with starPulse during prayer time
+    float baseGlow = max(uSunGlow, 0.0);
+    float glowScale = baseGlow * starPulse;
+    float spread = mix(1.0, 1.24, clamp(baseGlow - 1.0, 0.0, 1.0)) * (1.0 + 0.16 * breathSigned);
     float innerCorona = 0.56 * exp(-pow(max(dEdgeUnit / (0.42 * spread), 1e-5), 1.22));
     float outerBloom  = 0.24 * exp(-pow(max(dEdgeUnit / (1.22 * spread), 1e-5), 1.78));
 
     float eclipseMask = (nearestPlanetT < zSun) ? (1.0 - nearestPlanetAlpha) : 1.0;
     vec3 rawGlow = (STAR_TINT * innerCorona + CORONA_TINT * outerBloom) * glowScale;
-    // Soft filmic compression prevents hard white clipping beyond the star limb at 1.5x glow
+    // Soft filmic compression prevents hard white clipping beyond the star limb during peak pulse
     vec3 glowCol = (1.0 - exp(-rawGlow * 1.28)) * mix(1.0, 0.35, 1.0 - eclipseMask);
 
-    return max(coreCol * coreBody * 1.05 * eclipseMask, glowCol);
+    return max(coreCol * coreBody * coreGain * eclipseMask, glowCol);
 }
 
 void main() {
@@ -551,17 +583,20 @@ void main() {
 
     vec3 sunPos = vec3(0.0);
     float prayerFactor = computePrayerActivity();
+    vec2 pulseState = computeStarPulse(prayerFactor);
+    float starPulse = pulseState.x;
+    float breathSigned = pulseState.y;
 
-    // 1. Deep obsidian-grey space gradient + resolution-aware crisp starfield (with prayer-time sprinkle)
+    // 1. Deep obsidian-grey space gradient + resolution-aware crisp starfield & crescents
     vec3 col = mix(BG_HORIZON, BG_ZENITH, smoothstep(0.10, 0.85, vUv.y));
     col += evalStarfield(vUv, prayerFactor, aspect, rCoreH, pxScale);
 
-    // 2. Five active prayer orbits + astrolabe meridian pips
-    vec4 orbitEval = evalOrbitalPlane(uCamPos, rd, rdDx, rdDy, resScale);
+    // 2. Five active prayer orbits + center alignment dots
+    vec4 orbitEval = evalOrbitalPlane(uCamPos, rd, rdDx, rdDy, resScale, breathSigned);
     vec3 orbitRgb = orbitEval.rgb;
     float tRing = orbitEval.a;
 
-    // 3. Five sculpted 3D prayer planets (foreground sector in front of star)
+    // 3. Five sculpted 3D prayer planets (foreground sector in front of star, reflecting star pulsation)
     float nearestT = 1e9;
     vec4 nearestPlanet = vec4(0.0);
 
@@ -574,7 +609,7 @@ void main() {
         float alignBoost = exp(-pow(max(abs(ang) / 0.055, 1e-5), 2.0));
         float tHit = 1e9;
         vec4 pCol = evalPlanet(
-            uCamPos, rd, pPos, uPlanetRadii[i], sunPos, focal, alignBoost, float(i) + 1.0, tHit
+            uCamPos, rd, pPos, uPlanetRadii[i], orbitR, sunPos, focal, alignBoost, breathSigned, float(i) + 1.0, tHit
         );
         if (pCol.a > 0.001 && tHit < nearestT) {
             nearestT = tHit;
@@ -593,8 +628,8 @@ void main() {
         col += orbitRgb;
     }
 
-    // 5. Responsive warm-ivory bottom star (exact 35% rising above bottom edge, 1.5x glow)
-    vec3 sunAdd = evalSun(uCamPos, sunPos, ndc, focal, camRight, camUp, camFwd, rCoreH, nearestPlanet.a, nearestT);
+    // 5. Responsive warm-ivory bottom star (exact 35% rising above bottom edge, pulsating gently at prayer time)
+    vec3 sunAdd = evalSun(uCamPos, sunPos, ndc, focal, camRight, camUp, camFwd, rCoreH, starPulse, breathSigned, nearestPlanet.a, nearestT);
     col = clamp(col + sunAdd, 0.0, 1.0);
 
     // 6. Native 1x1 per-pixel micro-dither (eliminates OLED gradient banding with zero blocky grain)

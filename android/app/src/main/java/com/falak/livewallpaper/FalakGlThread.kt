@@ -105,6 +105,7 @@ class FalakGlThread(
     override fun run() {
         var lastPhaseMs = SystemClock.uptimeMillis()
         var glitterPhaseSec = 0.0
+        var pulseTimeSec = 0.0
         try {
             if (!initEglDisplayAndContext()) {
                 Log.e(TAG, "Failed to initialize EGL14 / OpenGL ES 3.0")
@@ -204,16 +205,16 @@ class FalakGlThread(
                     val angles = angleProvider()
                     val starfield = starfieldProvider()
                     val isNearPrayer = angles.any { kotlin.math.abs(it) < config.prayerSprinkleAngleRad }
-                    val animateGlitter = isNearPrayer &&
-                        starfield.glitterSpeed > 0.001f &&
-                        starfield.densityScale > 0.001f
-                    if (animateGlitter) {
-                        glitterPhaseSec = (glitterPhaseSec + dtSec * starfield.glitterSpeed.toDouble()) % 100_000.0
+                    if (isNearPrayer) {
+                        pulseTimeSec = (pulseTimeSec + dtSec) % 100_000.0
+                        if (starfield.glitterSpeed > 0.001f && starfield.densityScale > 0.001f) {
+                            glitterPhaseSec = (glitterPhaseSec + dtSec * starfield.glitterSpeed.toDouble()) % 100_000.0
+                        }
                     }
                     synchronized(lock) {
-                        prayerSprinkleActive = animateGlitter
+                        prayerSprinkleActive = isNearPrayer
                     }
-                    renderer?.draw(w, h, glitterPhaseSec.toFloat(), angles, starfield)
+                    renderer?.draw(w, h, glitterPhaseSec.toFloat(), pulseTimeSec.toFloat(), angles, starfield)
                     if (!EGL14.eglSwapBuffers(eglDisplay, eglSurface)) {
                         val err = EGL14.eglGetError()
                         if (err == EGL14.EGL_BAD_SURFACE || err == EGL14.EGL_CONTEXT_LOST) {
