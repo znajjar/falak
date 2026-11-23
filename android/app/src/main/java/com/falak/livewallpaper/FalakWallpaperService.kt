@@ -37,7 +37,8 @@ class FalakWallpaperService : WallpaperService() {
                 angleProvider = {
                     val s = currentSettings
                     PrayerTimesEngine.computeState(s.location, s.method).anglesRad
-                }
+                },
+                starfieldProvider = { currentSettings.starfield }
             ).apply { start() }
         }
 

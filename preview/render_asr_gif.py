@@ -163,6 +163,9 @@ gl.uniform1f(u('uSunCoreR'), cfg.star.coreRadiusWidthNorm);
 gl.uniform1f(u('uSunGlow'), cfg.star.glowIntensity);
 gl.uniform1f(u('uGrainStrength'), 0.25);
 gl.uniform1f(u('uStarfieldStrength'), cfg.atmosphere.starfieldStrength);
+gl.uniform1f(u('uStarSize'), cfg.atmosphere.starSizeScale);
+gl.uniform1f(u('uStarDensity'), cfg.atmosphere.starDensityScale);
+gl.uniform1f(u('uGlitterSpeed'), cfg.atmosphere.glitterSpeed);
 
 window.renderFrame = (tSec, angles) => {{
   gl.uniform1f(u('uTime'), tSec);

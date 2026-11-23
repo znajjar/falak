@@ -36,6 +36,9 @@ class FalakRenderer(
     private var uSunGlow = -1
     private var uGrainStrength = -1
     private var uStarfieldStrength = -1
+    private var uStarSize = -1
+    private var uStarDensity = -1
+    private var uGlitterSpeed = -1
 
     fun init(): Boolean {
         val vertSrc = readRawResource(R.raw.falak_vert)
@@ -73,7 +76,13 @@ class FalakRenderer(
         return true
     }
 
-    fun draw(width: Int, height: Int, timeSeconds: Float, planetAnglesRad: FloatArray) {
+    fun draw(
+        width: Int,
+        height: Int,
+        timeSeconds: Float,
+        planetAnglesRad: FloatArray,
+        starfield: FalakPreferences.StarfieldSettings = FalakPreferences.StarfieldSettings()
+    ) {
         if (program == 0 || width <= 0 || height <= 0) return
 
         GLES30.glViewport(0, 0, width, height)
@@ -102,6 +111,9 @@ class FalakRenderer(
         GLES30.glUniform1f(uSunGlow, config.sunGlow)
         GLES30.glUniform1f(uGrainStrength, config.grainStrength)
         GLES30.glUniform1f(uStarfieldStrength, config.starfieldStrength)
+        GLES30.glUniform1f(uStarSize, starfield.sizeScale)
+        GLES30.glUniform1f(uStarDensity, starfield.densityScale)
+        GLES30.glUniform1f(uGlitterSpeed, starfield.glitterSpeed)
 
         GLES30.glBindVertexArray(vao)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
@@ -181,6 +193,9 @@ class FalakRenderer(
         uSunGlow = GLES30.glGetUniformLocation(program, "uSunGlow")
         uGrainStrength = GLES30.glGetUniformLocation(program, "uGrainStrength")
         uStarfieldStrength = GLES30.glGetUniformLocation(program, "uStarfieldStrength")
+        uStarSize = GLES30.glGetUniformLocation(program, "uStarSize")
+        uStarDensity = GLES30.glGetUniformLocation(program, "uStarDensity")
+        uGlitterSpeed = GLES30.glGetUniformLocation(program, "uGlitterSpeed")
     }
 
     private fun compileShader(type: Int, src: String): Int {

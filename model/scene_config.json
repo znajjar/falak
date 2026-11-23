@@ -1,6 +1,6 @@
 {
   "name": "Falak",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "display": {
     "orientation": "portrait",
     "scaling": "Responsive across any vertical phone screen size, pixel density, and aspect ratio (16:9 through 22:9+ and portrait foldables)",
@@ -76,6 +76,9 @@
   },
   "atmosphere": {
     "grainStrength": 0.55,
-    "starfieldStrength": 1.0
+    "starfieldStrength": 1.0,
+    "starSizeScale": 1.0,
+    "starDensityScale": 1.0,
+    "glitterSpeed": 1.0
   }
 }

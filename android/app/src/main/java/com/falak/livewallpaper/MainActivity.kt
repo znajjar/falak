@@ -61,6 +61,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
     @Volatile
     private var scrubEpochMs: Long? = null
 
+    @Volatile
+    private var currentStarfield: FalakPreferences.StarfieldSettings =
+        FalakPreferences.StarfieldSettings()
+
     private lateinit var statusLabel: TextView
     private lateinit var livePill: TextView
     private lateinit var locationValueView: TextView
@@ -68,6 +72,18 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var seekBar: SeekBar
     private val prayerCells = arrayOfNulls<TextView>(5)
     private var updatingSeekBar = false
+
+    private lateinit var starsToggleButton: Button
+    private lateinit var starfieldPanel: LinearLayout
+    private lateinit var previewGlitterPill: TextView
+    private lateinit var starSizeValueView: TextView
+    private lateinit var starDensityValueView: TextView
+    private lateinit var glitterSpeedValueView: TextView
+    private lateinit var starSizeSeek: SeekBar
+    private lateinit var starDensitySeek: SeekBar
+    private lateinit var glitterSpeedSeek: SeekBar
+    private var updatingStarSliders = false
+    private var starfieldPanelVisible = false
 
     private val uiTicker = object : Runnable {
         override fun run() {
@@ -82,6 +98,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         val saved = FalakPreferences.load(this)
         currentLocation = saved.location
         currentMethod = saved.method
+        currentStarfield = saved.starfield
 
         val dp = resources.displayMetrics.density
         val root = FrameLayout(this).apply {
@@ -240,22 +257,43 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         }
         dock.addView(seekBar)
 
-        // Row 5: Set as Live Wallpaper button
-        val applyButton = Button(this).apply {
-            text = getString(R.string.set_wallpaper_button)
-            setTextColor(COLOR_IVORY)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
-            isAllCaps = false
-            background = roundedBox(dp, 22f, 0x28FFF7E9, 0x50FFF7E9)
+        // Row 5: Stars tuning toggle + Set as Live Wallpaper button
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 topMargin = (8 * dp).toInt()
             }
+        }
+
+        starsToggleButton = Button(this).apply {
+            text = "✦ Stars"
+            setTextColor(COLOR_IVORY)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.8f)
+            isAllCaps = false
+            background = roundedBox(dp, 22f, 0x18E6EBF5, 0x35E6EBF5)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.38f).apply {
+                rightMargin = (8 * dp).toInt()
+            }
+            setOnClickListener {
+                setStarfieldPanelVisible(!starfieldPanelVisible, dp)
+            }
+        }
+
+        val applyButton = Button(this).apply {
+            text = getString(R.string.set_wallpaper_button)
+            setTextColor(COLOR_IVORY)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.2f)
+            isAllCaps = false
+            background = roundedBox(dp, 22f, 0x28FFF7E9, 0x50FFF7E9)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.62f)
             setOnClickListener { openLiveWallpaperPicker() }
         }
-        dock.addView(applyButton)
+        actionRow.addView(starsToggleButton)
+        actionRow.addView(applyButton)
+        dock.addView(actionRow)
 
         val dockWidth = if (screenWidthDp > 480f) {
             (460 * dp).toInt()
@@ -273,6 +311,21 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         }
         root.addView(dock, dockParams)
 
+        // Bottom translucent Starfield Tuning card (Size, Density, Glitter Speed)
+        starfieldPanel = buildStarfieldPanel(dp).apply {
+            visibility = View.GONE
+        }
+        val starfieldParams = FrameLayout.LayoutParams(
+            dockWidth,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        ).apply {
+            bottomMargin = (24 * dp).toInt()
+            leftMargin = (14 * dp).toInt()
+            rightMargin = (14 * dp).toInt()
+        }
+        root.addView(starfieldPanel, starfieldParams)
+
         @Suppress("DEPRECATION")
         root.setOnApplyWindowInsetsListener { _, insets ->
             val topInset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -280,8 +333,15 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             } else {
                 maxOf(insets.systemWindowInsetTop, insets.displayCutout?.safeInsetTop ?: 0)
             }
+            val bottomInset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                insets.getInsets(WindowInsets.Type.navigationBars() or WindowInsets.Type.displayCutout()).bottom
+            } else {
+                maxOf(insets.systemWindowInsetBottom, insets.displayCutout?.safeInsetBottom ?: 0)
+            }
             dockParams.topMargin = topInset + (10 * dp).toInt()
             dock.layoutParams = dockParams
+            starfieldParams.bottomMargin = bottomInset + (14 * dp).toInt()
+            starfieldPanel.layoutParams = starfieldParams
             insets
         }
 
@@ -291,9 +351,11 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
 
         glThread = FalakGlThread(
             context = applicationContext,
-            angleProvider = { currentOrbitalState().anglesRad }
+            angleProvider = { currentOrbitalState().anglesRad },
+            starfieldProvider = { currentStarfield }
         ).apply { start() }
 
+        syncStarfieldControls()
         refreshHud()
     }
 
@@ -302,6 +364,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         val saved = FalakPreferences.load(this)
         currentLocation = saved.location
         currentMethod = saved.method
+        currentStarfield = saved.starfield
+        syncStarfieldControls()
         glThread?.setVisible(true)
         glThread?.requestRedraw()
         uiHandler.post(uiTicker)
@@ -378,6 +442,263 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             updatingSeekBar = true
             seekBar.progress = state.localMinutesOfDay.toInt().coerceIn(0, 1439)
             updatingSeekBar = false
+        }
+
+        val isAligned = state.anglesRad.any { abs(it) < 0.08f }
+        if (::previewGlitterPill.isInitialized) {
+            previewGlitterPill.alpha = if (isAligned) 1.0f else 0.72f
+            previewGlitterPill.text = if (isAligned) "✦ Glitter On" else "✦ Test Glitter"
+        }
+    }
+
+    private fun buildStarfieldPanel(dp: Float): LinearLayout {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val padH = (14 * dp).toInt()
+            val padV = (12 * dp).toInt()
+            setPadding(padH, padV, padH, padV)
+            background = roundedBox(dp, 20f, 0xD40D0E12.toInt(), 0x2EE6EBF5)
+            isClickable = true
+            isFocusable = true
+        }
+
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = (6 * dp).toInt()
+            }
+        }
+
+        val titleTv = TextView(this).apply {
+            text = "STARFIELD"
+            setTextColor(0x99DCE2F0.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            letterSpacing = 0.08f
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        previewGlitterPill = TextView(this).apply {
+            text = "✦ Test Glitter"
+            setTextColor(COLOR_IVORY)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            setPadding((9 * dp).toInt(), (4 * dp).toInt(), (9 * dp).toInt(), (4 * dp).toInt())
+            background = roundedBox(dp, 12f, 0x22FFF7E9, 0x45FFF7E9)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                rightMargin = (6 * dp).toInt()
+            }
+            setOnClickListener {
+                val aligned = currentOrbitalState().anglesRad.any { abs(it) < 0.08f }
+                if (aligned && scrubEpochMs != null) {
+                    scrubEpochMs = null
+                } else {
+                    alignForGlitterPreview()
+                }
+                glThread?.requestRedraw()
+                refreshHud()
+            }
+        }
+
+        val resetPill = TextView(this).apply {
+            text = "Reset"
+            setTextColor(0xCCDCE2F0.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            typeface = Typeface.MONOSPACE
+            setPadding((9 * dp).toInt(), (4 * dp).toInt(), (9 * dp).toInt(), (4 * dp).toInt())
+            background = roundedBox(dp, 12f, 0x16E6EBF5, 0x2CE6EBF5)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                rightMargin = (6 * dp).toInt()
+            }
+            setOnClickListener {
+                updateStarfield(FalakPreferences.StarfieldSettings())
+                syncStarfieldControls()
+            }
+        }
+
+        val closePill = TextView(this).apply {
+            text = "✕"
+            setTextColor(0xB8DCE2F0.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            setPadding((8 * dp).toInt(), (3 * dp).toInt(), (8 * dp).toInt(), (3 * dp).toInt())
+            background = roundedBox(dp, 12f, 0x14E6EBF5, 0x26E6EBF5)
+            setOnClickListener { setStarfieldPanelVisible(false, dp) }
+        }
+
+        headerRow.addView(titleTv)
+        headerRow.addView(previewGlitterPill)
+        headerRow.addView(resetPill)
+        headerRow.addView(closePill)
+        panel.addView(headerRow)
+
+        val (sizeRow, sizeVal, sizeBar) = buildSliderRow(
+            dp = dp,
+            label = "Star Size",
+            maxProgress = 150,
+            onProgress = { progress ->
+                val v = FalakPreferences.MIN_STAR_SIZE + progress / 100f
+                updateStarfield(currentStarfield.copy(sizeScale = v))
+                starSizeValueView.text = formatMultiplier(v, allowOff = false)
+            }
+        )
+        starSizeValueView = sizeVal
+        starSizeSeek = sizeBar
+        panel.addView(sizeRow)
+
+        val (densityRow, densityVal, densityBar) = buildSliderRow(
+            dp = dp,
+            label = "Star Density",
+            maxProgress = 220,
+            onProgress = { progress ->
+                val v = progress / 100f
+                updateStarfield(currentStarfield.copy(densityScale = v))
+                starDensityValueView.text = formatMultiplier(v, allowOff = true)
+            }
+        )
+        starDensityValueView = densityVal
+        starDensitySeek = densityBar
+        panel.addView(densityRow)
+
+        val (glitterRow, glitterVal, glitterBar) = buildSliderRow(
+            dp = dp,
+            label = "Glitter Speed",
+            maxProgress = 300,
+            onStartTouch = {
+                val aligned = currentOrbitalState().anglesRad.any { abs(it) < 0.08f }
+                if (!aligned) {
+                    alignForGlitterPreview()
+                    refreshHud()
+                }
+            },
+            onProgress = { progress ->
+                val v = progress / 100f
+                updateStarfield(currentStarfield.copy(glitterSpeed = v))
+                glitterSpeedValueView.text = formatMultiplier(v, allowOff = true)
+            }
+        )
+        glitterSpeedValueView = glitterVal
+        glitterSpeedSeek = glitterBar
+        panel.addView(glitterRow)
+
+        return panel
+    }
+
+    private fun buildSliderRow(
+        dp: Float,
+        label: String,
+        maxProgress: Int,
+        onStartTouch: (() -> Unit)? = null,
+        onProgress: (Int) -> Unit
+    ): Triple<LinearLayout, TextView, SeekBar> {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = (4 * dp).toInt()
+            }
+        }
+        val labelRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val nameTv = TextView(this).apply {
+            text = label
+            setTextColor(0xCCDCE2F0.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            typeface = Typeface.SANS_SERIF
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val valueTv = TextView(this).apply {
+            setTextColor(COLOR_IVORY)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            typeface = Typeface.MONOSPACE
+        }
+        labelRow.addView(nameTv)
+        labelRow.addView(valueTv)
+
+        val bar = SeekBar(this).apply {
+            max = maxProgress
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser && !updatingStarSliders) {
+                        onProgress(progress)
+                    }
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {
+                    onStartTouch?.invoke()
+                }
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
+            })
+        }
+
+        row.addView(labelRow)
+        row.addView(bar)
+        return Triple(row, valueTv, bar)
+    }
+
+    private fun setStarfieldPanelVisible(visible: Boolean, dp: Float) {
+        starfieldPanelVisible = visible
+        starfieldPanel.visibility = if (visible) View.VISIBLE else View.GONE
+        starsToggleButton.background = if (visible) {
+            roundedBox(dp, 22f, 0x2CFFF7E9, 0x70FFF7E9)
+        } else {
+            roundedBox(dp, 22f, 0x18E6EBF5, 0x35E6EBF5)
+        }
+        starsToggleButton.text = if (visible) "✦ Stars ▾" else "✦ Stars"
+    }
+
+    private fun syncStarfieldControls() {
+        if (!::starSizeSeek.isInitialized) return
+        updatingStarSliders = true
+        val sf = currentStarfield
+        starSizeSeek.progress = Math.round((sf.sizeScale - FalakPreferences.MIN_STAR_SIZE) * 100f)
+            .coerceIn(0, starSizeSeek.max)
+        starDensitySeek.progress = Math.round(sf.densityScale * 100f)
+            .coerceIn(0, starDensitySeek.max)
+        glitterSpeedSeek.progress = Math.round(sf.glitterSpeed * 100f)
+            .coerceIn(0, glitterSpeedSeek.max)
+
+        starSizeValueView.text = formatMultiplier(sf.sizeScale, allowOff = false)
+        starDensityValueView.text = formatMultiplier(sf.densityScale, allowOff = true)
+        glitterSpeedValueView.text = formatMultiplier(sf.glitterSpeed, allowOff = true)
+        updatingStarSliders = false
+    }
+
+    private fun updateStarfield(updated: FalakPreferences.StarfieldSettings) {
+        currentStarfield = updated
+        FalakPreferences.saveStarfield(this, updated)
+        glThread?.requestRedraw()
+    }
+
+    private fun alignForGlitterPreview() {
+        val state = currentOrbitalState()
+        val targetIdx = state.nextPrayerIndex.coerceIn(0, 4)
+        val today = PrayerTimesEngine.computePrayerDay(
+            currentLocation,
+            currentMethod,
+            currentLocationDate()
+        )
+        scrubEpochMs = today.instants[targetIdx]
+        glThread?.requestRedraw()
+    }
+
+    private fun formatMultiplier(value: Float, allowOff: Boolean): String {
+        return if (allowOff && value < 0.005f) {
+            "Off"
+        } else {
+            String.format(Locale.US, "%.2f×", value)
         }
     }
 
