@@ -12,6 +12,7 @@ An original OpenGL ES 3.0 Android live wallpaper that scales cleanly to **any ve
 - **[All Releases](https://github.com/znajjar/falak/releases)** (APK packaged at `dist/falak.apk`)
 
 ## Features & Visual Design
+- **Material Design 3 Live Preview Studio**: Minimizes the live OpenGL ES 3.0 wallpaper preview upwards in true phone proportions above a sleek Material Design 3 dark controls sheet (prayer schedule, 24-hour scrubber, location/source bottom sheets, segmented orbit mode switcher, and live starfield sliders), expanding smoothly into full screen when tapped.
 - **Universal Vertical Screen Scaling**: Automatically adapts the rising star (`35%` visible above the bottom edge), orbital line crispness, starfield pinpoint scale, and UI insets (status bars & camera cutouts) to any Android phone resolution, density, and vertical aspect ratio (`16:9`, `18:9`, `19.5:9`, `20:9`, `21:9`, `22:9`, and portrait foldables).
 - **Worldwide Manual Location Selector (Zero Permissions)**: Pick manually from **145 built-in world cities** (searchable offline) or enter **custom coordinates & IANA timezone** for any location on Earth—with **zero location or internet permissions** requested.
 - **Selectable Calculation Sources**: Switch between **Jordan Ministry of Awqaf** (`Fajr 18° / Maghrib 2.12° / Isha 18°`, Standard Asr, calibrated to the Hashemite Jordanian calendar) and **Muslim World League (MWL)** (`Fajr 18° / Isha 17°`, Standard Asr). Also accessible directly via Android's live wallpaper settings gear.
@@ -27,7 +28,7 @@ An original OpenGL ES 3.0 Android live wallpaper that scales cleanly to **any ve
 - `model/falak.vert` & `model/falak.frag` — Portable GLSL ES 3.00 responsive analytic 3D shader (Android OpenGL ES 3.0 & WebGL2)
 - `model/scene_config.json` — Scene, display scaling, and calculation source configuration
 - `preview/` — Interactive WebGL2 browser preview (with screen ratio, manual location & source selectors), snapshot renderer, and Asr GIF generator
-- `android/` — Pure Android framework Gradle project (`com.falak.livewallpaper`, `minSdk = 29`, `targetSdk = 35`, zero external dependencies)
+- `android/` — Android Gradle project (`com.falak.livewallpaper`, `minSdk = 29`, `targetSdk = 35`) with Jetpack Compose Material Design 3 UI and pure EGL14/OpenGL ES 3.0 `WallpaperService` (zero permissions)
 
 ## Building
 

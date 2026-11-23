@@ -1,6 +1,7 @@
 package com.falak.livewallpaper
 
 import android.content.Context
+import android.graphics.SurfaceTexture
 import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLContext
@@ -36,7 +37,7 @@ class FalakGlThread(
 
     private var running = true
     private var visible = false
-    private var holder: SurfaceHolder? = null
+    private var nativeWindow: Any? = null
     private var surfaceChanged = false
     private var surfaceDestroyedPending = false
     private var width = 0
@@ -53,7 +54,7 @@ class FalakGlThread(
 
     fun onSurfaceAvailable(surfaceHolder: SurfaceHolder, w: Int, h: Int) {
         synchronized(lock) {
-            holder = surfaceHolder
+            nativeWindow = surfaceHolder
             width = w
             height = h
             surfaceChanged = true
@@ -63,12 +64,41 @@ class FalakGlThread(
         }
     }
 
+    fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, w: Int, h: Int) {
+        synchronized(lock) {
+            nativeWindow = surfaceTexture
+            width = w
+            height = h
+            surfaceChanged = true
+            surfaceDestroyedPending = false
+            immediateFrames = 3
+            lock.notifyAll()
+        }
+    }
+
+    fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, w: Int, h: Int) {
+        synchronized(lock) {
+            val sameWindow = (nativeWindow === surfaceTexture)
+            nativeWindow = surfaceTexture
+            width = w
+            height = h
+            if (!sameWindow) {
+                surfaceChanged = true
+            }
+            surfaceDestroyedPending = false
+            immediateFrames = maxOf(immediateFrames, 3)
+            lock.notifyAll()
+        }
+    }
+
     fun onSurfaceDestroyed() {
         synchronized(lock) {
-            holder = null
+            nativeWindow = null
             surfaceDestroyedPending = true
             lock.notifyAll()
-            while (surfaceDestroyedPending && running && isAlive) {
+            var attempts = 0
+            while (surfaceDestroyedPending && running && isAlive && attempts < 15) {
+                attempts++
                 try {
                     lock.wait(100)
                 } catch (_: InterruptedException) {
@@ -81,7 +111,7 @@ class FalakGlThread(
     fun setVisible(isVisible: Boolean) {
         synchronized(lock) {
             visible = isVisible
-            if (isVisible && holder != null) {
+            if (isVisible && nativeWindow != null) {
                 immediateFrames = maxOf(immediateFrames, 2)
             }
             lock.notifyAll()
@@ -98,7 +128,7 @@ class FalakGlThread(
     fun stopAndRelease() {
         synchronized(lock) {
             running = false
-            holder = null
+            nativeWindow = null
             lock.notifyAll()
         }
         try {
@@ -119,7 +149,7 @@ class FalakGlThread(
             }
 
             while (true) {
-                var activeHolder: SurfaceHolder? = null
+                var activeWindow: Any? = null
                 var w = 0
                 var h = 0
                 var needRecreate = false
@@ -129,7 +159,7 @@ class FalakGlThread(
 
                 synchronized(lock) {
                     while (running && !surfaceDestroyedPending) {
-                        val ready = visible && holder != null && width > 0 && height > 0
+                        val ready = visible && nativeWindow != null && width > 0 && height > 0
                         if (!ready) {
                             try {
                                 lock.wait()
@@ -166,12 +196,12 @@ class FalakGlThread(
                         shouldExit = true
                     } else {
                         needDestroySurface = surfaceDestroyedPending
-                        activeHolder = holder
+                        activeWindow = nativeWindow
                         w = width
                         h = height
                         needRecreate = surfaceChanged
                         surfaceChanged = false
-                        shouldDraw = visible && activeHolder != null && w > 0 && h > 0
+                        shouldDraw = visible && activeWindow != null && w > 0 && h > 0
                         if (immediateFrames > 0) immediateFrames--
                     }
                 }
@@ -188,8 +218,8 @@ class FalakGlThread(
                 }
 
                 if (needRecreate || eglSurface == EGL14.EGL_NO_SURFACE) {
-                    val targetHolder = activeHolder ?: continue
-                    if (!recreateEglSurface(targetHolder)) {
+                    val targetWindow = activeWindow ?: continue
+                    if (!recreateEglSurface(targetWindow)) {
                         continue
                     }
                     if (renderer == null) {
@@ -288,14 +318,26 @@ class FalakGlThread(
         return eglContext != EGL14.EGL_NO_CONTEXT
     }
 
-    private fun recreateEglSurface(surfaceHolder: SurfaceHolder): Boolean {
+    private fun recreateEglSurface(window: Any): Boolean {
         destroyEglSurface()
-        val surface = surfaceHolder.surface
-        if (surface == null || !surface.isValid || eglConfig == null) return false
+        if (eglConfig == null) return false
+
+        val target: Any = when (window) {
+            is SurfaceHolder -> {
+                val s = window.surface
+                if (s == null || !s.isValid) return false
+                s
+            }
+            is SurfaceTexture -> {
+                if (window.isReleased) return false
+                window
+            }
+            else -> return false
+        }
 
         val surfaceAttribs = intArrayOf(EGL14.EGL_NONE)
         eglSurface = EGL14.eglCreateWindowSurface(
-            eglDisplay, eglConfig, surface, surfaceAttribs, 0
+            eglDisplay, eglConfig, target, surfaceAttribs, 0
         )
         if (eglSurface == EGL14.EGL_NO_SURFACE) {
             Log.e(TAG, "eglCreateWindowSurface failed: 0x${Integer.toHexString(EGL14.eglGetError())}")
