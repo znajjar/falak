@@ -3,9 +3,8 @@ package com.falak.livewallpaper
 /**
  * Operating mode controlling how the five prayer planets traverse their orbital arches.
  *
- * - [PRAYER_WINDOW] (default): Planets cross the screen closely around each prayer time at
- *   steady speed—crossing dead center at athan, with Fajr exiting at Sunrise and the remaining
- *   prayers handing off cleanly at the midpoint between consecutive prayers.
+ * - [PRAYER_WINDOW] (default): Unbroken prayer-to-prayer relay crossing dead center at athan—Fajr
+ *   hands off to Dhuhr at Sunrise, and all other consecutive prayers hand off at the midpoint.
  * - [ORBIT_24H]: Continuous 360° ~24-hour astronomical cycle around the rising star.
  */
 enum class OrbitMode(
@@ -18,7 +17,7 @@ enum class OrbitMode(
         id = "PRAYER_WINDOW",
         displayName = "Prayer Window",
         shortName = "Prayer",
-        summary = "Fajr exits at Sunrise · other prayers hand off at midpoints"
+        summary = "Fajr→Dhuhr at Sunrise · other prayers hand off at midpoints"
     ),
     ORBIT_24H(
         id = "ORBIT_24H",

@@ -6,7 +6,7 @@
     {
       "id": "PRAYER_WINDOW",
       "name": "Prayer Window",
-      "description": "Constant-velocity transit centered at each prayer: Fajr exits at Sunrise; Dhuhr mirrors its half-interval; Dhuhr->Asr->Maghrib->Isha hand off at midpoints, with Isha exiting at half-night."
+      "description": "Unbroken prayer-to-prayer relay centered at each athan: Fajr hands off to Dhuhr at Sunrise, and Dhuhr->Asr->Maghrib->Isha->Fajr hand off at the midpoint between consecutive prayers."
     },
     {
       "id": "ORBIT_24H",

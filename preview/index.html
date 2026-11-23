@@ -1260,18 +1260,18 @@ void main() {
 
       for (let i = 0; i < 5; i++) {
         const edge = edgeAngles[i];
-        for (let dIdx = 0; dIdx < 3; dIdx++) {
+        for (let dIdx = 1; dIdx <= 3; dIdx++) {
+          const dPrev = days[dIdx - 1];
           const d = days[dIdx];
           const dNext = days[dIdx + 1];
           const pMs = d.instants[i];
           let enterMs, exitMs;
           if (i === 0) {
+            enterMs = Math.min(pMs - MS_PER_MIN, Math.floor((dPrev.instants[4] + d.instants[0]) / 2));
             exitMs = Math.max(pMs + MS_PER_MIN, d.sunrise);
-            enterMs = pMs - (exitMs - pMs);
           } else if (i === 1) {
-            const half = Math.max(MS_PER_MIN, Math.floor((d.instants[2] - d.instants[1]) / 2));
-            enterMs = pMs - half;
-            exitMs = pMs + half;
+            enterMs = Math.min(pMs - MS_PER_MIN, d.sunrise);
+            exitMs = Math.max(pMs + MS_PER_MIN, Math.floor((d.instants[1] + d.instants[2]) / 2));
           } else if (i === 2) {
             enterMs = Math.min(pMs - MS_PER_MIN, Math.floor((d.instants[1] + d.instants[2]) / 2));
             exitMs = Math.max(pMs + MS_PER_MIN, Math.floor((d.instants[2] + d.instants[3]) / 2));
@@ -1317,9 +1317,11 @@ void main() {
       const edgeAngles = computeEdgeAnglesRad(aspect);
       let angles;
       if (orbitMode.id === 'PRAYER_WINDOW') {
+        const [p2y, p2m, p2d] = shiftDate(p.y, p.m, p.d, -2);
         const [n2y, n2m, n2d] = shiftDate(p.y, p.m, p.d, +2);
+        prev2 = computePrayerDay(loc, method, p2y, p2m, p2d);
         next2 = computePrayerDay(loc, method, n2y, n2m, n2d);
-        angles = computePrayerWindowAngles(epochMs, [prev, today, next, next2], edgeAngles);
+        angles = computePrayerWindowAngles(epochMs, [prev2, prev, today, next, next2], edgeAngles);
       } else {
         angles = [];
         for (let i = 0; i < 5; i++) {

@@ -25,9 +25,9 @@ import kotlin.math.tan
  * sources (Jordan Ministry of Awqaf, MWL), continuous angle-based high-latitude handling,
  * and dual operating modes:
  *
- * - [OrbitMode.PRAYER_WINDOW] (default): Planets cross dead center at exact prayer time with
- *   Fajr disappearing at Sunrise (constant velocity) and the remaining prayers splitting the
- *   inter-prayer intervals cleanly in half with edge-to-edge handoffs.
+ * - [OrbitMode.PRAYER_WINDOW] (default): Continuous prayer-to-prayer relay where each planet
+ *   crosses dead center at exact prayer time—Fajr hands off to Dhuhr at Sunrise, and all other
+ *   consecutive prayers (Dhuhr→Asr→Maghrib→Isha→Fajr) hand off cleanly at the midpoint between them.
  * - [OrbitMode.ORBIT_24H]: Continuous 360° ~24h astronomical cycle with zero midnight jump.
  */
 object PrayerTimesEngine {
@@ -119,11 +119,12 @@ object PrayerTimesEngine {
             }
 
             OrbitMode.PRAYER_WINDOW -> {
+                val p2 = prev2 ?: computePrayerDay(location, method, date.minusDays(2)).also { prev2 = it }
                 val n2 = next2 ?: computePrayerDay(location, method, date.plusDays(2)).also { next2 = it }
                 val edgeAngles = computeEdgeAnglesRad(aspect, config)
                 computePrayerWindowAngles(
                     nowEpochMs = nowEpochMs,
-                    days = arrayOf(prev, today, next, n2),
+                    days = arrayOf(p2, prev, today, next, n2),
                     edgeAnglesRad = edgeAngles
                 )
             }
@@ -256,18 +257,19 @@ object PrayerTimesEngine {
     }
 
     /**
-     * Prayer-Window orbital mapping:
-     * - Fajr (0): constant velocity across screen, centered at Fajr, exits cleanly at Sunrise.
-     * - Dhuhr (1): constant velocity (half of Dhuhr→Asr before & after Dhuhr), hands off to Asr.
+     * Prayer-Window orbital mapping (continuous prayer-to-prayer relay; planets glide at
+     * steady speed before athan and steady speed after athan to match each half-window):
+     * - Fajr (0): enters at midpoint(prev.Isha, Fajr), centered at Fajr, hands off to Dhuhr at Sunrise.
+     * - Dhuhr (1): enters at Sunrise, centered at Dhuhr, hands off to Asr at midpoint(Dhuhr, Asr).
      * - Asr (2): enters at midpoint(Dhuhr, Asr), centered at Asr, hands off at midpoint(Asr, Maghrib).
      * - Maghrib (3): enters at midpoint(Asr, Maghrib), centered at Maghrib, hands off at midpoint(Maghrib, Isha).
-     * - Isha (4): enters at midpoint(Maghrib, Isha), centered at Isha, exits at midpoint(Isha, NextFajr).
+     * - Isha (4): enters at midpoint(Maghrib, Isha), centered at Isha, hands off to next Fajr at midpoint(Isha, NextFajr).
      * A 4-minute off-screen wake taper beyond ±edge keeps orbital trails silky-smooth with zero pop
      * while the planet sphere itself enters at exact enterMs and exits at exact exitMs.
      */
     private fun computePrayerWindowAngles(
         nowEpochMs: Long,
-        days: Array<PrayerDay>, // [prev, today, next, next2]
+        days: Array<PrayerDay>, // [prev2, prev, today, next, next2]
         edgeAnglesRad: FloatArray
     ): FloatArray {
         val wakeFadeMs = 4L * MS_PER_MIN
@@ -275,21 +277,21 @@ object PrayerTimesEngine {
         val angles = FloatArray(5) { PI.toFloat() }
         for (i in 0 until 5) {
             val edge = edgeAnglesRad[i].toDouble()
-            for (dIdx in 0 until 3) {
+            for (dIdx in 1..3) {
+                val dPrev = days[dIdx - 1]
                 val d = days[dIdx]
                 val dNext = days[dIdx + 1]
                 val pMs = d.instants[i]
                 val enterMs: Long
                 val exitMs: Long
                 when (i) {
-                    0 -> { // Fajr: symmetric constant velocity, disappears at exact Sunrise
+                    0 -> { // Fajr: handoff from prev Isha -> disappears & hands off to Dhuhr at exact Sunrise
+                        enterMs = ((dPrev.instants[4] + d.instants[0]) / 2L).coerceAtMost(pMs - MS_PER_MIN)
                         exitMs = d.sunriseInstant.coerceAtLeast(pMs + MS_PER_MIN)
-                        enterMs = pMs - (exitMs - pMs)
                     }
-                    1 -> { // Dhuhr: symmetric constant velocity, hands off to Asr at midpoint
-                        val half = ((d.instants[2] - d.instants[1]) / 2L).coerceAtLeast(MS_PER_MIN)
-                        enterMs = pMs - half
-                        exitMs = pMs + half
+                    1 -> { // Dhuhr: handoff from Fajr at exact Sunrise -> handoff to Asr at midpoint
+                        enterMs = d.sunriseInstant.coerceAtMost(pMs - MS_PER_MIN)
+                        exitMs = ((d.instants[1] + d.instants[2]) / 2L).coerceAtLeast(pMs + MS_PER_MIN)
                     }
                     2 -> { // Asr: handoff from Dhuhr -> handoff to Maghrib
                         enterMs = ((d.instants[1] + d.instants[2]) / 2L).coerceAtMost(pMs - MS_PER_MIN)
@@ -299,7 +301,7 @@ object PrayerTimesEngine {
                         enterMs = ((d.instants[2] + d.instants[3]) / 2L).coerceAtMost(pMs - MS_PER_MIN)
                         exitMs = ((d.instants[3] + d.instants[4]) / 2L).coerceAtLeast(pMs + MS_PER_MIN)
                     }
-                    else -> { // Isha: handoff from Maghrib -> exits at half-night (midpoint to next Fajr)
+                    else -> { // Isha: handoff from Maghrib -> handoff to next Fajr at midpoint(Isha, NextFajr)
                         enterMs = ((d.instants[3] + d.instants[4]) / 2L).coerceAtMost(pMs - MS_PER_MIN)
                         exitMs = ((d.instants[4] + dNext.instants[0]) / 2L).coerceAtLeast(pMs + MS_PER_MIN)
                     }
