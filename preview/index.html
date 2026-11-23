@@ -454,7 +454,71 @@ vec3 evalStarLayer(
     return tint * intensity;
 }
 
-// Native-resolution varied-size starfield with user-tunable size, density & prayer-time glitter
+// Delicate anti-aliased celestial micro-crescents (hilal) dotted sparsely among the stars
+vec3 evalCrescentLayer(
+    vec2 aspectUv,
+    float gridDensity,
+    float threshold,
+    vec2 seedOffset,
+    float glitterFactor,
+    float pxScale,
+    float sizeScale,
+    float densityScale
+) {
+    vec2 grid = aspectUv * gridDensity;
+    vec2 cell = floor(grid);
+    vec2 f = fract(grid);
+
+    vec2 rnd = hash22(cell + seedOffset);
+    float effThreshold = 1.0 - clamp((1.0 - threshold) * densityScale, 0.0, 0.72);
+    if (rnd.x <= effThreshold) return vec3(0.0);
+    float densityFade = smoothstep(effThreshold, min(effThreshold + 0.012, 0.9999), rnd.x);
+
+    // Keep crescent comfortably inside cell interior (zero clipping even at 2x star size)
+    vec2 center = vec2(0.24) + 0.52 * hash22(cell + seedOffset * 1.91 + vec2(53.7, 17.3));
+    float cellSizePx = uResolution.y / gridDensity;
+    vec2 deltaPx = (f - center) * cellSizePx;
+
+    float sizeT = pow(max(rnd.y, 1e-5), 1.35);
+    float rPx = max(3.4, mix(5.2, 9.6, sizeT) * pxScale * sizeScale);
+
+    // Quick bounding reject before rotation & SDF
+    if (dot(deltaPx, deltaPx) > (rPx * 2.8) * (rPx * 2.8)) return vec3(0.0);
+
+    // Graceful natural hilal tilt (horns curving gently upward-left or upward-right)
+    float orientSeed = hash12(cell + seedOffset * 0.77 + vec2(12.4, 88.1));
+    float flip = (orientSeed >= 0.5) ? 1.0 : -1.0;
+    float tilt = flip * mix(0.24, 0.98, fract(orientSeed * 2.0));
+    float c = cos(tilt);
+    float s = sin(tilt);
+    vec2 p = vec2(c * deltaPx.x - s * deltaPx.y, s * deltaPx.x + c * deltaPx.y);
+
+    // Classic open Islamic hilal SDF: outer disc minus shifted cutout (~212 deg open horns, 0.36 R belly)
+    float dOuter = length(p) - rPx;
+    float dInner = length(p - vec2(0.0, 0.32 * rPx)) - (0.96 * rPx);
+    float dCrescent = max(dOuter, -dInner);
+
+    float shape = 1.0 - smoothstep(-0.55, 0.65, dCrescent);
+    // Keep soft lunar aura hugging the lit crescent belly/horns without filling the dark cutout mouth
+    float mouthMask = smoothstep(-0.18 * rPx, 0.25 * rPx, dInner);
+    float rimGlow = 0.24 * mouthMask * exp(-pow(max(max(dCrescent, 0.0) / max(1.4, rPx * 0.36), 1e-5), 1.8));
+
+    float baseBright = mix(0.36, 0.74, pow(max(rnd.y, 1e-5), 0.85));
+
+    // Gentle lunar shimmer synchronized with prayer-time glitter
+    float phase = hash12(cell + seedOffset * 2.71) * TAU;
+    float freq = mix(1.15, 2.45, fract(rnd.y * 5.37));
+    float wave = 0.5 + 0.5 * sin(uTime * freq + phase);
+    float sparkle = pow(max(wave, 1e-5), 2.4);
+    float shimmer = mix(1.0, 0.78 + 0.78 * sparkle, glitterFactor);
+
+    vec3 lunarTint = mix(vec3(0.92, 0.94, 0.99), STAR_TINT, 0.74);
+    lunarTint = mix(lunarTint, ACTIVE_TINT, 0.42 * glitterFactor * sparkle);
+
+    return lunarTint * (shape + rimGlow) * baseBright * shimmer * densityFade;
+}
+
+// Native-resolution varied-size starfield + micro-crescents with user-tunable size, density & glitter
 vec3 evalStarfield(vec2 uv, float prayerFactor, float aspect, float rCoreH, float pxScale) {
     float densityScale = clamp(uStarDensity, 0.0, 2.5);
     if (uStarfieldStrength <= 0.001 || densityScale <= 0.001) return vec3(0.0);
@@ -478,7 +542,10 @@ vec3 evalStarfield(vec2 uv, float prayerFactor, float aspect, float rCoreH, floa
     // Layer 3: fine cosmic dust pinpoints
     stars += evalStarLayer(aspectUv, 84.0, 0.950, 0.48, 0.95, 0.07, 0.21, vec2(43.7, 82.3), glitterFactor, pxScale, sizeScale, densityScale, false);
 
-    // Layer 4: prayer-time "sprinkle" — varied-size diamond pinpoints that awaken
+    // Layer 4: subtle celestial micro-crescents (hilal) dotted sparsely across the starry sky
+    stars += evalCrescentLayer(aspectUv, 10.5, 0.62, vec2(137.4, 41.9), glitterFactor, pxScale, sizeScale, densityScale);
+
+    // Layer 5: prayer-time "sprinkle" — varied-size diamond pinpoints that awaken
     // and gently twinkle across the dark sky exclusively during prayer alignment
     if (glitterFactor > 0.01) {
         vec2 grid = aspectUv * 58.0;
