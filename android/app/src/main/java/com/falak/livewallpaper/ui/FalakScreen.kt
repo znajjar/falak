@@ -10,7 +10,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -68,16 +67,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -169,19 +165,14 @@ fun FalakScreen(
     )
 
     val density = LocalDensity.current
-    val topBarRadiusPx = with(density) { 26.dp.toPx() }
     val cardRadiusPx = with(density) { 28.dp.toPx() }
 
     var rootOrigin by remember { mutableStateOf(Offset.Zero) }
-    var topBarRect by remember { mutableStateOf<BackdropBlurRect?>(null) }
     var controlsCardRect by remember { mutableStateOf<BackdropBlurRect?>(null) }
     var lastEmittedSpec by remember { mutableStateOf<BackdropBlurSpec?>(null) }
 
-    val blurRects = remember(controlsCardRect, topBarRect) {
-        buildList(2) {
-            controlsCardRect?.let { add(it) }
-            topBarRect?.let { add(it) }
-        }
+    val blurRects = remember(controlsCardRect) {
+        listOfNotNull(controlsCardRect)
     }
     val currentBlurSpec = BackdropBlurSpec(alpha = glassAlpha, rects = blurRects)
 
@@ -201,10 +192,10 @@ fun FalakScreen(
             }
     ) {
         val usableHeight = (maxHeight - stableTopInset - stableBottomInset).coerceAtLeast(480.dp)
-        val openSkyHeight = (usableHeight * 0.32f).coerceIn(155.dp, 300.dp)
+        val openSkyHeight = (usableHeight * 0.37f).coerceIn(190.dp, 350.dp)
 
         // 1. Full-bleed native OpenGL ES 3.0 live wallpaper (renders real-time Dual-Kawase blur
-        //    strictly behind the floating frosted-glass top pill and controls card)
+        //    strictly behind the floating frosted-glass controls card)
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
@@ -264,43 +255,23 @@ fun FalakScreen(
                 }
         )
 
-        // 3. Floating Frosted-Glass Material Design 3 UI Overlay (Top Pill + Controls Card)
+        // 3. Single Floating Frosted-Glass Material Design 3 Controls Card
         if (glassAlpha > 0.01f) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = stableTopInset + 8.dp, bottom = stableBottomInset + 12.dp)
+                    .padding(top = stableTopInset, bottom = stableBottomInset + 12.dp)
                     .padding(horizontal = 14.dp)
                     .alpha(glassAlpha),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Floating Frosted-Glass M3 Top Bar Pill
-                FrostedTopPill(
-                    uiState = uiState,
-                    onReturnToLive = onReturnToLive,
-                    onEnterFullScreen = { onFullScreenChange(true) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 520.dp)
-                        .height(52.dp)
-                        .onGloballyPositioned { coords ->
-                            val b = coords.boundsInWindow()
-                            topBarRect = BackdropBlurRect(
-                                leftPx = b.left - rootOrigin.x,
-                                topPx = b.top - rootOrigin.y,
-                                rightPx = b.right - rootOrigin.x,
-                                bottomPx = b.bottom - rootOrigin.y,
-                                cornerRadiusPx = topBarRadiusPx
-                            )
-                        }
-                )
-
-                // Open full-bleed sharp sky window (taps pass through to Layer 2 -> full screen!)
+                // Pure unobstructed full-bleed sky window from the very top edge
                 Spacer(modifier = Modifier.height(openSkyHeight))
 
                 // Floating Frosted-Glass Material Design 3 Controls Card
                 FrostedControlsCard(
                     uiState = uiState,
+                    onReturnToLive = onReturnToLive,
                     onAlignPrayer = onAlignPrayer,
                     onScrubMinutes = onScrubMinutes,
                     onOpenLocationSheet = { activeSheet = ActiveSheet.LOCATION },
@@ -394,142 +365,9 @@ fun FalakScreen(
 }
 
 @Composable
-private fun FrostedTopPill(
-    uiState: FalakUiState,
-    onReturnToLive: () -> Unit,
-    onEnterFullScreen: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val curTimeStr = PrayerTimesEngine.formatLocalMinutes(uiState.orbitalState.localMinutesOfDay)
-    val pillShape = RoundedCornerShape(26.dp)
-
-    Box(
-        modifier = modifier
-            .clip(pillShape)
-            .background(GlassCardFill)
-            .border(width = 1.dp, brush = GlassRimBrush, shape = pillShape)
-            // Consume clicks on the top pill itself so tapping it doesn't accidentally toggle fullscreen
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {}
-            )
-            .padding(horizontal = 14.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Image(
-                painter = painterResource(R.drawable.ic_falak_wordmark),
-                contentDescription = stringResource(R.string.app_name),
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(width = 30.dp, height = 24.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "${uiState.location.name} · $curTimeStr",
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            if (uiState.isLive) {
-                Surface(
-                    shape = CircleShape,
-                    color = GlassTileFill,
-                    border = BorderStroke(0.75.dp, GlassSectionBorder)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.5.dp)
-                                .clip(CircleShape)
-                                .background(FalakPalette.LiveDotGreen)
-                        )
-                        Text(
-                            text = "LIVE",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            } else {
-                Surface(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable(onClick = onReturnToLive),
-                    shape = CircleShape,
-                    color = GlassActiveFill,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_m3_refresh),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(
-                            text = "Live",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Full-screen pure wallpaper preview button
-            Surface(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .semantics {
-                        contentDescription = "Hide controls for full screen wallpaper preview"
-                        role = Role.Button
-                    }
-                    .clickable(onClick = onEnterFullScreen),
-                shape = CircleShape,
-                color = GlassTileFill,
-                border = BorderStroke(0.75.dp, GlassSectionBorder)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_m3_open_in_full),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun FrostedControlsCard(
     uiState: FalakUiState,
+    onReturnToLive: () -> Unit,
     onAlignPrayer: (Int) -> Unit,
     onScrubMinutes: (Float) -> Unit,
     onOpenLocationSheet: () -> Unit,
@@ -569,6 +407,7 @@ private fun FrostedControlsCard(
             ) {
                 PrayerScheduleSection(
                     uiState = uiState,
+                    onReturnToLive = onReturnToLive,
                     onAlignPrayer = onAlignPrayer,
                     onScrubMinutes = onScrubMinutes
                 )
@@ -631,6 +470,7 @@ private fun FrostedControlsCard(
 @Composable
 private fun PrayerScheduleSection(
     uiState: FalakUiState,
+    onReturnToLive: () -> Unit,
     onAlignPrayer: (Int) -> Unit,
     onScrubMinutes: (Float) -> Unit
 ) {
@@ -695,19 +535,62 @@ private fun PrayerScheduleSection(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
+                if (!uiState.isLive) {
+                    Surface(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(onClick = onReturnToLive),
+                        shape = CircleShape,
+                        color = GlassActiveFill,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_m3_refresh),
+                                contentDescription = "Return to live time",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "Live",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = GlassTileFill,
                     border = BorderStroke(0.75.dp, GlassSectionBorder)
                 ) {
-                    Text(
-                        text = curTimeStr,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        if (uiState.isLive) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(FalakPalette.LiveDotGreen)
+                            )
+                        }
+                        Text(
+                            text = curTimeStr,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = FontFamily.Monospace
+                            ),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
