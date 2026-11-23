@@ -4,8 +4,9 @@ import android.graphics.SurfaceTexture
 import android.view.TextureView
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
@@ -28,7 +29,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -56,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,12 +65,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -80,11 +82,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
-import androidx.compose.ui.util.lerp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.falak.livewallpaper.BackdropBlurRect
+import com.falak.livewallpaper.BackdropBlurSpec
 import com.falak.livewallpaper.FalakPreferences
 import com.falak.livewallpaper.OrbitMode
 import com.falak.livewallpaper.PrayerLocation
@@ -95,11 +97,24 @@ import com.falak.livewallpaper.ui.theme.FalakPalette
 import kotlinx.coroutines.delay
 import java.util.Locale
 
+private val GlassCardFill = Color(0x6E0E1017)
+private val GlassSectionFill = Color(0x4A181C26)
+private val GlassTileFill = Color(0x52232836)
+private val GlassActiveFill = Color(0x99483B28)
+private val GlassRimBrush = Brush.verticalGradient(
+    colors = listOf(
+        Color(0x3DFFFFFF),
+        Color(0x14FFFFFF)
+    )
+)
+private val GlassSectionBorder = Color(0x16FFFFFF)
+
 @Composable
 fun FalakScreen(
     uiState: FalakUiState,
     isFullScreen: Boolean,
     onFullScreenChange: (Boolean) -> Unit,
+    onBlurSpecChange: (BackdropBlurSpec) -> Unit,
     onSurfaceAvailable: (SurfaceTexture, Int, Int) -> Unit,
     onSurfaceSizeChanged: (SurfaceTexture, Int, Int) -> Unit,
     onSurfaceDestroyed: () -> Unit,
@@ -133,8 +148,6 @@ fun FalakScreen(
         }
     }
 
-    // Preserve stable non-zero system insets so hiding bars in immersive full-screen
-    // never causes the minimized preview coordinates to jitter on exit.
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val cutoutTop = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
     val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -149,302 +162,204 @@ fun FalakScreen(
         stableBottomInset = navBarBottom
     }
 
-    val fullScreenProgress by animateFloatAsState(
-        targetValue = if (isFullScreen) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.86f, stiffness = 360f),
-        label = "wallpaperFullScreenProgress"
+    val glassAlpha by animateFloatAsState(
+        targetValue = if (isFullScreen) 0f else 1f,
+        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+        label = "frostedCardAlpha"
     )
 
     val density = LocalDensity.current
+    val topBarRadiusPx = with(density) { 26.dp.toPx() }
+    val cardRadiusPx = with(density) { 28.dp.toPx() }
+
+    var rootOrigin by remember { mutableStateOf(Offset.Zero) }
+    var topBarRect by remember { mutableStateOf<BackdropBlurRect?>(null) }
+    var controlsCardRect by remember { mutableStateOf<BackdropBlurRect?>(null) }
+    var lastEmittedSpec by remember { mutableStateOf<BackdropBlurSpec?>(null) }
+
+    val blurRects = remember(controlsCardRect, topBarRect) {
+        buildList(2) {
+            controlsCardRect?.let { add(it) }
+            topBarRect?.let { add(it) }
+        }
+    }
+    val currentBlurSpec = BackdropBlurSpec(alpha = glassAlpha, rects = blurRects)
+
+    SideEffect {
+        if (currentBlurSpec != lastEmittedSpec) {
+            lastEmittedSpec = currentBlurSpec
+            onBlurSpecChange(currentBlurSpec)
+        }
+    }
 
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(FalakPalette.ObsidianBg)
+            .onGloballyPositioned { coords ->
+                rootOrigin = coords.positionInWindow()
+            }
     ) {
-        val rootW = maxWidth
-        val rootH = maxHeight
-        val safeRootH = rootH.coerceAtLeast(1.dp)
-        val safeRootW = rootW.coerceAtLeast(1.dp)
+        val usableHeight = (maxHeight - stableTopInset - stableBottomInset).coerceAtLeast(480.dp)
+        val openSkyHeight = (usableHeight * 0.32f).coerceIn(155.dp, 300.dp)
 
-        val topBarHeight = 52.dp
-        val previewTopY = stableTopInset + topBarHeight + 6.dp
-        val usableHeight = (rootH - stableTopInset - stableBottomInset).coerceAtLeast(460.dp)
-        val targetPreviewH = (usableHeight * 0.39f).coerceIn(210.dp, 360.dp)
-        val previewScale = minOf(
-            targetPreviewH / safeRootH,
-            (safeRootW - 48.dp) / safeRootW
-        ).coerceIn(0.28f, 0.50f)
+        // 1. Full-bleed native OpenGL ES 3.0 live wallpaper (renders real-time Dual-Kawase blur
+        //    strictly behind the floating frosted-glass top pill and controls card)
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                TextureView(ctx).apply {
+                    isOpaque = true
+                    surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                        override fun onSurfaceTextureAvailable(
+                            surface: SurfaceTexture,
+                            width: Int,
+                            height: Int
+                        ) {
+                            onSurfaceAvailable(surface, width, height)
+                        }
 
-        val previewVisualW = rootW * previewScale
-        val previewVisualH = rootH * previewScale
-        val controlsTopY = previewTopY + previewVisualH + 16.dp
+                        override fun onSurfaceTextureSizeChanged(
+                            surface: SurfaceTexture,
+                            width: Int,
+                            height: Int
+                        ) {
+                            onSurfaceSizeChanged(surface, width, height)
+                        }
 
-        val minimizedTransYPx = with(density) {
-            ((previewTopY + previewVisualH / 2f) - (rootH / 2f)).toPx()
-        }
+                        override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                            onSurfaceDestroyed()
+                            return true
+                        }
 
-        val currentScale = lerp(previewScale, 1f, fullScreenProgress)
-        val currentTransYPx = lerp(minimizedTransYPx, 0f, fullScreenProgress)
-        val visualCornerDp = lerp(26f, 0f, fullScreenProgress)
-        val chromeAlpha = (1f - fullScreenProgress * 1.55f).coerceIn(0f, 1f)
-        val controlsSlideY = (fullScreenProgress * 64f).dp
-        val topBarSlideY = (-fullScreenProgress * 28f).dp
+                        override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+                    }
+                    if (isAvailable) {
+                        surfaceTexture?.let { st ->
+                            if (width > 0 && height > 0) {
+                                onSurfaceAvailable(st, width, height)
+                            }
+                        }
+                    }
+                }
+            }
+        )
 
-        // 1. Subtle lifted tonal backdrop behind the minimized wallpaper stage
-        if (chromeAlpha > 0.01f) {
-            Box(
+        // 2. Tap anywhere on the exposed wallpaper to toggle unobstructed full-screen mode
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .semantics {
+                    contentDescription = if (isFullScreen) {
+                        "Tap anywhere to show controls"
+                    } else {
+                        "Tap exposed wallpaper to view full screen"
+                    }
+                }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    onFullScreenChange(!isFullScreen)
+                }
+        )
+
+        // 3. Floating Frosted-Glass Material Design 3 UI Overlay (Top Pill + Controls Card)
+        if (glassAlpha > 0.01f) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(controlsTopY + 32.dp)
-                    .alpha(chromeAlpha)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                FalakPalette.StageBackdropTop,
-                                FalakPalette.StageBackdropBottom
-                            )
-                        )
-                    )
+                    .fillMaxSize()
+                    .padding(top = stableTopInset + 8.dp, bottom = stableBottomInset + 12.dp)
+                    .padding(horizontal = 14.dp)
+                    .alpha(glassAlpha),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Soft ambient starlight aura beneath the floating minimized wallpaper frame
-                Box(
+                // Floating Frosted-Glass M3 Top Bar Pill
+                FrostedTopPill(
+                    uiState = uiState,
+                    onReturnToLive = onReturnToLive,
+                    onEnterFullScreen = { onFullScreenChange(true) },
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    FalakPalette.WarmGlow.copy(alpha = 0.09f),
-                                    Color.Transparent
-                                ),
-                                center = Offset(
-                                    x = with(density) { (rootW / 2f).toPx() },
-                                    y = with(density) { (previewTopY + previewVisualH * 0.78f).toPx() }
-                                ),
-                                radius = with(density) { (previewVisualW * 1.45f).toPx().coerceAtLeast(1f) }
+                        .fillMaxWidth()
+                        .widthIn(max = 520.dp)
+                        .height(52.dp)
+                        .onGloballyPositioned { coords ->
+                            val b = coords.boundsInWindow()
+                            topBarRect = BackdropBlurRect(
+                                leftPx = b.left - rootOrigin.x,
+                                topPx = b.top - rootOrigin.y,
+                                rightPx = b.right - rootOrigin.x,
+                                bottomPx = b.bottom - rootOrigin.y,
+                                cornerRadiusPx = topBarRadiusPx
                             )
-                        )
+                        }
+                )
+
+                // Open full-bleed sharp sky window (taps pass through to Layer 2 -> full screen!)
+                Spacer(modifier = Modifier.height(openSkyHeight))
+
+                // Floating Frosted-Glass Material Design 3 Controls Card
+                FrostedControlsCard(
+                    uiState = uiState,
+                    onAlignPrayer = onAlignPrayer,
+                    onScrubMinutes = onScrubMinutes,
+                    onOpenLocationSheet = { activeSheet = ActiveSheet.LOCATION },
+                    onOpenSourceSheet = { activeSheet = ActiveSheet.SOURCE },
+                    onSelectOrbitMode = onSelectOrbitMode,
+                    onToggleGlitterPreview = onToggleGlitterPreview,
+                    onResetStarfield = onResetStarfield,
+                    onStarSizeChange = onStarSizeChange,
+                    onStarDensityChange = onStarDensityChange,
+                    onGlitterSpeedChange = onGlitterSpeedChange,
+                    onApplyLiveWallpaper = onApplyLiveWallpaper,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .widthIn(max = 520.dp)
+                        .onGloballyPositioned { coords ->
+                            val b = coords.boundsInWindow()
+                            controlsCardRect = BackdropBlurRect(
+                                leftPx = b.left - rootOrigin.x,
+                                topPx = b.top - rootOrigin.y,
+                                rightPx = b.right - rootOrigin.x,
+                                bottomPx = b.bottom - rootOrigin.y,
+                                cornerRadiusPx = cardRadiusPx
+                            )
+                        }
                 )
             }
         }
 
-        // 2. Material 3 Top App Bar (fades & glides upward when wallpaper expands to full screen)
-        if (chromeAlpha > 0.01f) {
-            FalakTopBar(
-                uiState = uiState,
-                onReturnToLive = onReturnToLive,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = stableTopInset)
-                    .height(topBarHeight)
-                    .offset(y = topBarSlideY)
-                    .alpha(chromeAlpha)
-            )
-        }
-
-        // 3. Elevated M3 Controls Sheet below the minimized wallpaper
-        if (chromeAlpha > 0.01f) {
-            ControlsSheet(
-                uiState = uiState,
-                bottomInset = stableBottomInset,
-                onAlignPrayer = onAlignPrayer,
-                onScrubMinutes = onScrubMinutes,
-                onOpenLocationSheet = { activeSheet = ActiveSheet.LOCATION },
-                onOpenSourceSheet = { activeSheet = ActiveSheet.SOURCE },
-                onSelectOrbitMode = onSelectOrbitMode,
-                onToggleGlitterPreview = onToggleGlitterPreview,
-                onResetStarfield = onResetStarfield,
-                onStarSizeChange = onStarSizeChange,
-                onStarDensityChange = onStarDensityChange,
-                onGlitterSpeedChange = onGlitterSpeedChange,
-                onApplyLiveWallpaper = onApplyLiveWallpaper,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = controlsTopY)
-                    .offset(y = controlsSlideY)
-                    .alpha(chromeAlpha)
-            )
-        }
-
-        // 3b. Opaque obsidian shadow card behind the minimized TextureView so drop shadow casts
-        //     cleanly onto the stage backdrop without tinting the OpenGL canvas.
-        if (chromeAlpha > 0.01f) {
-            val backingShape = RoundedCornerShape(26.dp)
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = previewTopY)
-                    .size(width = previewVisualW, height = previewVisualH)
-                    .alpha(chromeAlpha)
-                    .shadow(
-                        elevation = 18.dp,
-                        shape = backingShape,
-                        clip = false,
-                        ambientColor = Color.Black,
-                        spotColor = Color.Black
-                    )
-                    .clip(backingShape)
-                    .background(FalakPalette.ObsidianBg)
-            )
-        }
-
-        // 4. Persistent Native-Aspect OpenGL ES 3.0 TextureView
-        //    Minimized upwards into a phone-proportioned card, expanding seamlessly to full screen.
-        Box(
+        // 4. Auto-fading full-screen exit hint pill
+        AnimatedVisibility(
+            visible = isFullScreen && showFullScreenHint,
+            enter = fadeIn(),
+            exit = fadeOut(),
             modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = currentScale
-                    scaleY = currentScale
-                    translationY = currentTransYPx
-                    if (visualCornerDp > 0.25f) {
-                        val safeScale = currentScale.coerceAtLeast(0.1f)
-                        shape = RoundedCornerShape((visualCornerDp / safeScale).dp)
-                        clip = true
-                    } else {
-                        clip = false
-                    }
-                }
+                .align(Alignment.BottomCenter)
+                .padding(bottom = stableBottomInset + 28.dp)
         ) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    TextureView(ctx).apply {
-                        isOpaque = true
-                        surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                            override fun onSurfaceTextureAvailable(
-                                surface: SurfaceTexture,
-                                width: Int,
-                                height: Int
-                            ) {
-                                onSurfaceAvailable(surface, width, height)
-                            }
-
-                            override fun onSurfaceTextureSizeChanged(
-                                surface: SurfaceTexture,
-                                width: Int,
-                                height: Int
-                            ) {
-                                onSurfaceSizeChanged(surface, width, height)
-                            }
-
-                            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                                onSurfaceDestroyed()
-                                return true
-                            }
-
-                            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
-                        }
-                        if (isAvailable) {
-                            surfaceTexture?.let { st ->
-                                if (width > 0 && height > 0) {
-                                    onSurfaceAvailable(st, width, height)
-                                }
-                            }
-                        }
-                    }
-                }
-            )
-        }
-
-        // 5. Minimized Preview Frame: crisp M3 bezel border, exact tap target, & expand affordance
-        if (!isFullScreen && chromeAlpha > 0.05f) {
-            val frameShape = RoundedCornerShape(26.dp)
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = previewTopY)
-                    .size(width = previewVisualW, height = previewVisualH)
-                    .alpha(chromeAlpha)
-                    .clip(frameShape)
-                    .border(
-                        width = 1.dp,
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.95f),
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-                            )
-                        ),
-                        shape = frameShape
+            Surface(
+                shape = CircleShape,
+                color = Color(0xB811141C),
+                border = BorderStroke(1.dp, Color(0x30FFFFFF))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_m3_close_fullscreen),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(15.dp)
                     )
-                    .semantics {
-                        contentDescription = "Tap wallpaper preview to view full screen"
-                        role = Role.Button
-                    }
-                    .clickable { onFullScreenChange(true) }
-            ) {
-                // Subtle expand badge in top-right dark sky corner (never blocks planets or star)
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(10.dp)
-                        .size(28.dp),
-                    shape = CircleShape,
-                    color = Color(0xA813161E),
-                    border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f))
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_m3_open_in_full),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        // 6. Full-Screen Tap-to-Exit Layer + auto-fading M3 hint pill
-        if (isFullScreen) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .semantics {
-                        contentDescription = "Tap anywhere to exit full screen wallpaper preview"
-                    }
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        onFullScreenChange(false)
-                    }
-            ) {
-                AnimatedVisibility(
-                    visible = showFullScreenHint,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = stableBottomInset + 28.dp)
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = Color(0xC214161D),
-                        border = BorderStroke(
-                            1.dp,
-                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
-                        ),
-                        tonalElevation = 6.dp
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_m3_close_fullscreen),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = "Tap anywhere to minimize",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+                    Text(
+                        text = "Tap anywhere to show controls",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -479,89 +394,132 @@ fun FalakScreen(
 }
 
 @Composable
-private fun FalakTopBar(
+private fun FrostedTopPill(
     uiState: FalakUiState,
     onReturnToLive: () -> Unit,
+    onEnterFullScreen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val curTimeStr = PrayerTimesEngine.formatLocalMinutes(uiState.orbitalState.localMinutesOfDay)
+    val pillShape = RoundedCornerShape(26.dp)
 
-    Row(
-        modifier = modifier.padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Box(
+        modifier = modifier
+            .clip(pillShape)
+            .background(GlassCardFill)
+            .border(width = 1.dp, brush = GlassRimBrush, shape = pillShape)
+            // Consume clicks on the top pill itself so tapping it doesn't accidentally toggle fullscreen
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {}
+            )
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Image(
-            painter = painterResource(R.drawable.ic_falak_wordmark),
-            contentDescription = stringResource(R.string.app_name),
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.size(width = 32.dp, height = 25.dp)
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_falak_wordmark),
+                contentDescription = stringResource(R.string.app_name),
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(width = 30.dp, height = 24.dp)
             )
-            Text(
-                text = "${uiState.location.name} · $curTimeStr",
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${uiState.location.name} · $curTimeStr",
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
-        if (uiState.isLive) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+            if (uiState.isLive) {
+                Surface(
+                    shape = CircleShape,
+                    color = GlassTileFill,
+                    border = BorderStroke(0.75.dp, GlassSectionBorder)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(FalakPalette.LiveDotGreen)
-                    )
-                    Text(
-                        text = "LIVE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.5.dp)
+                                .clip(CircleShape)
+                                .background(FalakPalette.LiveDotGreen)
+                        )
+                        Text(
+                            text = "LIVE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            } else {
+                Surface(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(onClick = onReturnToLive),
+                    shape = CircleShape,
+                    color = GlassActiveFill,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_m3_refresh),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = "Live",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
             }
-        } else {
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Full-screen pure wallpaper preview button
             Surface(
                 modifier = Modifier
+                    .size(32.dp)
                     .clip(CircleShape)
-                    .clickable(onClick = onReturnToLive),
+                    .semantics {
+                        contentDescription = "Hide controls for full screen wallpaper preview"
+                        role = Role.Button
+                    }
+                    .clickable(onClick = onEnterFullScreen),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                color = GlassTileFill,
+                border = BorderStroke(0.75.dp, GlassSectionBorder)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
+                Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_m3_refresh),
+                        painter = painterResource(R.drawable.ic_m3_open_in_full),
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "Live",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }
@@ -570,9 +528,8 @@ private fun FalakTopBar(
 }
 
 @Composable
-private fun ControlsSheet(
+private fun FrostedControlsCard(
     uiState: FalakUiState,
-    bottomInset: Dp,
     onAlignPrayer: (Int) -> Unit,
     onScrubMinutes: (Float) -> Unit,
     onOpenLocationSheet: () -> Unit,
@@ -586,58 +543,44 @@ private fun ControlsSheet(
     onApplyLiveWallpaper: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val cardShape = RoundedCornerShape(28.dp)
 
-    Surface(
-        modifier = modifier,
-        shape = sheetShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = 2.dp
+    Box(
+        modifier = modifier
+            .clip(cardShape)
+            .background(GlassCardFill)
+            .border(width = 1.dp, brush = GlassRimBrush, shape = cardShape)
+            // Prevent taps inside the card from bubbling to the background full-screen toggle
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {}
+            )
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Subtle M3 top grab/sheen divider line
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(width = 36.dp, height = 4.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
-                )
-            }
-
-            // Scrollable M3 cards area (wallpaper preview remains pinned & live above!)
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Scrollable M3 frosted sections inside the floating card
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .widthIn(max = 520.dp)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 4.dp, bottom = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                PrayerScheduleCard(
+                PrayerScheduleSection(
                     uiState = uiState,
                     onAlignPrayer = onAlignPrayer,
                     onScrubMinutes = onScrubMinutes
                 )
 
-                ConfigurationCard(
+                ConfigurationSection(
                     uiState = uiState,
                     onOpenLocationSheet = onOpenLocationSheet,
                     onOpenSourceSheet = onOpenSourceSheet,
                     onSelectOrbitMode = onSelectOrbitMode
                 )
 
-                StarfieldCard(
+                StarfieldSection(
                     uiState = uiState,
                     onToggleGlitterPreview = onToggleGlitterPreview,
                     onResetStarfield = onResetStarfield,
@@ -647,25 +590,21 @@ private fun ControlsSheet(
                 )
             }
 
-            // Pinned M3 Primary Action Bar
+            // Pinned bottom M3 primary CTA inside the floating glass card
             HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                color = Color(0x1EFFFFFF),
                 thickness = 1.dp
             )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .padding(bottom = bottomInset),
-                contentAlignment = Alignment.Center
+                    .padding(horizontal = 12.dp, vertical = 11.dp)
             ) {
                 Button(
                     onClick = onApplyLiveWallpaper,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .widthIn(max = 520.dp)
-                        .height(52.dp),
+                        .height(50.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
@@ -676,7 +615,7 @@ private fun ControlsSheet(
                     Icon(
                         painter = painterResource(R.drawable.ic_m3_wallpaper),
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
@@ -690,7 +629,7 @@ private fun ControlsSheet(
 }
 
 @Composable
-private fun PrayerScheduleCard(
+private fun PrayerScheduleSection(
     uiState: FalakUiState,
     onAlignPrayer: (Int) -> Unit,
     onScrubMinutes: (Float) -> Unit
@@ -710,13 +649,14 @@ private fun PrayerScheduleCard(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer
+        shape = RoundedCornerShape(20.dp),
+        color = GlassSectionFill,
+        border = BorderStroke(0.75.dp, GlassSectionBorder)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 13.dp)
+                .padding(horizontal = 12.dp, vertical = 12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -757,7 +697,8 @@ private fun PrayerScheduleCard(
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                    color = GlassTileFill,
+                    border = BorderStroke(0.75.dp, GlassSectionBorder)
                 ) {
                     Text(
                         text = curTimeStr,
@@ -765,23 +706,23 @@ private fun PrayerScheduleCard(
                             fontFamily = FontFamily.Monospace
                         ),
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(11.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Five tappable prayer alignment pills
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 for (i in 0 until 5) {
                     val isActive = (i == highlightedIndex)
                     val label = PrayerTimesEngine.PRAYER_NAMES[i]
                     val timeStr = state.today.formattedTimes[i]
-                    val pillShape = RoundedCornerShape(15.dp)
+                    val pillShape = RoundedCornerShape(14.dp)
 
                     Surface(
                         modifier = Modifier
@@ -789,21 +730,20 @@ private fun PrayerScheduleCard(
                             .clip(pillShape)
                             .clickable { onAlignPrayer(i) },
                         shape = pillShape,
-                        color = if (isActive) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
-                        },
-                        border = if (isActive) {
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-                        } else {
-                            null
-                        }
+                        color = if (isActive) GlassActiveFill else GlassTileFill,
+                        border = BorderStroke(
+                            width = if (isActive) 1.dp else 0.5.dp,
+                            color = if (isActive) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                            } else {
+                                GlassSectionBorder
+                            }
+                        )
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 2.dp, vertical = 8.dp),
+                                .padding(horizontal = 2.dp, vertical = 7.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
@@ -819,7 +759,7 @@ private fun PrayerScheduleCard(
                                 maxLines = 1,
                                 softWrap = false
                             )
-                            Spacer(modifier = Modifier.height(3.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = timeStr,
                                 style = MaterialTheme.typography.labelMedium.copy(
@@ -839,14 +779,13 @@ private fun PrayerScheduleCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // Material Design 3 24-hour orbit scrub slider
             Slider(
                 value = state.localMinutesOfDay.toFloat().coerceIn(0f, 1439f),
                 onValueChange = onScrubMinutes,
                 valueRange = 0f..1439f,
-                colors = falakSliderColors(),
+                colors = glassSliderColors(),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -859,17 +798,17 @@ private fun PrayerScheduleCard(
                 Text(
                     text = "00:00",
                     style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
                 )
                 Text(
                     text = "Tap a prayer or drag to preview",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
                 )
                 Text(
                     text = "23:59",
                     style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
                 )
             }
         }
@@ -878,7 +817,7 @@ private fun PrayerScheduleCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConfigurationCard(
+private fun ConfigurationSection(
     uiState: FalakUiState,
     onOpenLocationSheet: () -> Unit,
     onOpenSourceSheet: () -> Unit,
@@ -886,20 +825,20 @@ private fun ConfigurationCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer
+        shape = RoundedCornerShape(20.dp),
+        color = GlassSectionFill,
+        border = BorderStroke(0.75.dp, GlassSectionBorder)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 13.dp)
+                .padding(horizontal = 12.dp, vertical = 12.dp)
         ) {
-            // Side-by-side Location & Calculation Source M3 selector tiles
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                SelectorTile(
+                GlassSelectorTile(
                     iconRes = R.drawable.ic_m3_location,
                     caption = "LOCATION",
                     value = uiState.location.name,
@@ -911,7 +850,7 @@ private fun ConfigurationCard(
                     onClick = onOpenLocationSheet,
                     modifier = Modifier.weight(1f)
                 )
-                SelectorTile(
+                GlassSelectorTile(
                     iconRes = R.drawable.ic_m3_explore,
                     caption = "SOURCE",
                     value = uiState.method.shortName,
@@ -921,9 +860,8 @@ private fun ConfigurationCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Inline M3 SingleChoiceSegmentedButtonRow for Orbit Mode
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -938,13 +876,13 @@ private fun ConfigurationCard(
                 Text(
                     text = uiState.orbitMode.summary,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(7.dp))
 
             val modes = OrbitMode.values()
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -955,12 +893,12 @@ private fun ConfigurationCard(
                         onClick = { onSelectOrbitMode(mode) },
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
                         colors = SegmentedButtonDefaults.colors(
-                            activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            activeContainerColor = GlassActiveFill,
                             activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            activeBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
-                            inactiveContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            activeBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+                            inactiveContainerColor = GlassTileFill,
                             inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant
+                            inactiveBorderColor = Color(0x28FFFFFF)
                         ),
                         label = {
                             Text(
@@ -980,7 +918,7 @@ private fun ConfigurationCard(
 }
 
 @Composable
-private fun SelectorTile(
+private fun GlassSelectorTile(
     iconRes: Int,
     caption: String,
     value: String,
@@ -988,18 +926,19 @@ private fun SelectorTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val tileShape = RoundedCornerShape(16.dp)
+    val tileShape = RoundedCornerShape(15.dp)
     Surface(
         modifier = modifier
             .clip(tileShape)
             .clickable(onClick = onClick),
         shape = tileShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        color = GlassTileFill,
+        border = BorderStroke(0.75.dp, GlassSectionBorder)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .padding(horizontal = 11.dp, vertical = 9.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1020,7 +959,7 @@ private fun SelectorTile(
                 Icon(
                     painter = painterResource(R.drawable.ic_m3_chevron_right),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -1045,7 +984,7 @@ private fun SelectorTile(
 }
 
 @Composable
-private fun StarfieldCard(
+private fun StarfieldSection(
     uiState: FalakUiState,
     onToggleGlitterPreview: () -> Unit,
     onResetStarfield: () -> Unit,
@@ -1057,13 +996,14 @@ private fun StarfieldCard(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer
+        shape = RoundedCornerShape(20.dp),
+        color = GlassSectionFill,
+        border = BorderStroke(0.75.dp, GlassSectionBorder)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 13.dp)
+                .padding(horizontal = 12.dp, vertical = 12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1094,16 +1034,16 @@ private fun StarfieldCard(
                     },
                     shape = CircleShape,
                     colors = FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        containerColor = GlassTileFill,
                         labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        selectedContainerColor = Color(0x9949371E),
                         selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                     ),
                     border = FilterChipDefaults.filterChipBorder(
                         enabled = true,
                         selected = uiState.isGlitterActive,
-                        borderColor = MaterialTheme.colorScheme.outlineVariant,
-                        selectedBorderColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f)
+                        borderColor = Color(0x28FFFFFF),
+                        selectedBorderColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)
                     )
                 )
 
@@ -1186,17 +1126,17 @@ private fun StarfieldSliderRow(
             value = value.coerceIn(valueRange.start, valueRange.endInclusive),
             onValueChange = onValueChange,
             valueRange = valueRange,
-            colors = falakSliderColors(),
+            colors = glassSliderColors(),
             modifier = Modifier.fillMaxWidth()
         )
     }
 }
 
 @Composable
-private fun falakSliderColors() = SliderDefaults.colors(
+private fun glassSliderColors() = SliderDefaults.colors(
     thumbColor = MaterialTheme.colorScheme.primary,
     activeTrackColor = MaterialTheme.colorScheme.primary,
-    inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    inactiveTrackColor = Color(0x40DCE2F0)
 )
 
 private fun formatMultiplier(value: Float, allowOff: Boolean): String {

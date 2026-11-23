@@ -25,8 +25,9 @@ import kotlin.math.abs
 
 /**
  * Material Design 3 live preview and configuration activity for Falak.
- * Displays the OpenGL ES 3.0 celestial wallpaper minimized upwards in its native
- * portrait proportions above the M3 controls, expanding smoothly into full screen when tapped.
+ * Renders the full-bleed OpenGL ES 3.0 celestial wallpaper behind a floating frosted-glass
+ * M3 card with real-time GPU backdrop blur; tapping the exposed wallpaper toggles unobstructed
+ * full-screen preview.
  */
 class MainActivity : ComponentActivity() {
 
@@ -52,6 +53,9 @@ class MainActivity : ComponentActivity() {
     private var currentStarfield: FalakPreferences.StarfieldSettings =
         FalakPreferences.StarfieldSettings()
 
+    @Volatile
+    private var currentBlurSpec: BackdropBlurSpec = BackdropBlurSpec()
+
     private var uiState by mutableStateOf<FalakUiState?>(null)
     private var isFullScreen by mutableStateOf(false)
 
@@ -76,7 +80,8 @@ class MainActivity : ComponentActivity() {
         glThread = FalakGlThread(
             context = applicationContext,
             stateProvider = { aspect -> currentOrbitalState(aspect) },
-            starfieldProvider = { currentStarfield }
+            starfieldProvider = { currentStarfield },
+            blurSpecProvider = { currentBlurSpec }
         ).apply { start() }
 
         refreshUiState()
@@ -90,6 +95,10 @@ class MainActivity : ComponentActivity() {
                     onFullScreenChange = { fullScreen ->
                         isFullScreen = fullScreen
                         applySystemBars(fullScreen)
+                    },
+                    onBlurSpecChange = { spec ->
+                        currentBlurSpec = spec
+                        glThread?.requestRedraw()
                     },
                     onSurfaceAvailable = { surfaceTexture, w, h ->
                         if (w > 0 && h > 0) {

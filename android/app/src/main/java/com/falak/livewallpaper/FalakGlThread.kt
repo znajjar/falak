@@ -30,7 +30,8 @@ class FalakGlThread(
     },
     private val starfieldProvider: () -> FalakPreferences.StarfieldSettings = {
         FalakPreferences.load(context).starfield
-    }
+    },
+    private val blurSpecProvider: () -> BackdropBlurSpec = { BackdropBlurSpec() }
 ) : Thread("FalakGLThread") {
 
     private val lock = Object()
@@ -258,7 +259,8 @@ class FalakGlThread(
                         pulseTimeSeconds = pulseTimeSec.toFloat(),
                         planetAnglesRad = orbitalState.anglesRad,
                         starfield = starfield,
-                        prayerActivity = orbitalState.prayerActivity
+                        prayerActivity = orbitalState.prayerActivity,
+                        blurSpec = blurSpecProvider()
                     )
                     if (!EGL14.eglSwapBuffers(eglDisplay, eglSurface)) {
                         val err = EGL14.eglGetError()
