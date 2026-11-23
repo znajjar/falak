@@ -1,8 +1,12 @@
 # Gradle & Android build outputs
 android/.gradle/
 android/local.properties
+android/keystore.properties
 android/app/build/
 android/build/
+*.jks
+*.keystore
+*.p12
 *.iml
 .idea/
 .DS_Store

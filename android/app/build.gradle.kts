@@ -1,8 +1,31 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
+}
+
+fun signingProp(envKey: String, propKey: String): String? {
+    return System.getenv(envKey)?.takeIf { it.isNotEmpty() }
+        ?: keystoreProps.getProperty(propKey)?.takeIf { it.isNotEmpty() }
+}
+
+val releaseStorePath = signingProp("SIGNING_KEYSTORE_PATH", "storeFile")
+val releaseStorePassword = signingProp("SIGNING_STORE_PASSWORD", "storePassword")
+val releaseKeyAlias = signingProp("SIGNING_KEY_ALIAS", "keyAlias")
+val releaseKeyPassword = signingProp("SIGNING_KEY_PASSWORD", "keyPassword") ?: releaseStorePassword
+val hasReleaseSigning = !releaseStorePath.isNullOrBlank() &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
 
 android {
     namespace = "com.falak.livewallpaper"
@@ -17,6 +40,17 @@ android {
         versionName = "1.4.0"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStorePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -25,7 +59,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
         debug {
             isDebuggable = true

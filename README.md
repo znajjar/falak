@@ -9,7 +9,7 @@ An original OpenGL ES 3.0 Android live wallpaper that scales cleanly to **any ve
 </p>
 
 ## Download
-- **[All Releases](https://github.com/znajjar/falak/releases)** (APK packaged at `dist/falak.apk`)
+- **[All Releases](https://github.com/znajjar/falak/releases)** (consistently signed `falak.apk` attached to each GitHub Release via GitHub Actions)
 
 ## Features & Visual Design
 - **Material Design 3 Live Preview Studio**: Minimizes the live OpenGL ES 3.0 wallpaper preview upwards in true phone proportions above a sleek Material Design 3 dark controls sheet (prayer schedule, 24-hour scrubber, location/source bottom sheets, segmented orbit mode switcher, and live starfield sliders), expanding smoothly into full screen when tapped.
@@ -30,10 +30,13 @@ An original OpenGL ES 3.0 Android live wallpaper that scales cleanly to **any ve
 - `preview/` — Interactive WebGL2 browser preview (with screen ratio, manual location & source selectors), snapshot renderer, and Asr GIF generator
 - `android/` — Android Gradle project (`com.falak.livewallpaper`, `minSdk = 29`, `targetSdk = 35`) with Jetpack Compose Material Design 3 UI and pure EGL14/OpenGL ES 3.0 `WallpaperService` (zero permissions)
 
-## Building
+## Building & Release Signing
 
+Local debug build:
 ```bash
 cd android
 gradle assembleDebug --no-daemon
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Official release APKs are built and signed consistently by [`.github/workflows/build-release.yml`](.github/workflows/build-release.yml) using the repository's `RELEASE_KEYSTORE` secret (so every build across contributors, machines, and agents shares the exact same signing key and installs cleanly as an in-place update). For local release signing, set `SIGNING_KEYSTORE_PATH`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS`, and `SIGNING_KEY_PASSWORD` (or create a gitignored `android/keystore.properties`) and run `gradle assembleRelease --no-daemon`.

@@ -1,0 +1,304 @@
+name: Build & Sign Falak APK
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional existing or new release tag (e.g. v1.3.0) to attach falak.apk to"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Ensure Android SDK 35 platform & build-tools
+        run: |
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.8
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.8"
+
+      - name: Decode & verify RELEASE_KEYSTORE secret
+        env:
+          RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE }}
+          KEYSTORE_OUT: ${{ github.workspace }}/android/app/release.keystore
+        run: |
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import re
+          import secrets
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          raw = os.environ.get("RELEASE_KEYSTORE", "")
+          out_path = Path(os.environ["KEYSTORE_OUT"])
+          if not raw.strip():
+              print("::error::RELEASE_KEYSTORE secret is empty or not configured.")
+              sys.exit(1)
+
+          lines = [ln.strip() for ln in raw.replace("\r\n", "\n").split("\n") if ln.strip()]
+          # Mask every non-empty input line so nothing sensitive can ever appear in logs
+          for ln in lines:
+              print(f"::add-mask::{ln}", flush=True)
+
+          def strip_quotes(val: str) -> str:
+              v = val.strip()
+              if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
+                  return v[1:-1]
+              return v
+
+          def looks_like_keystore_bytes(data: bytes) -> bool:
+              # PKCS12 DER SEQUENCE (0x30 0x82 <2-byte len>) or indefinite (0x30 0x80), or JKS (0xFE 0xED 0xFE 0xED)
+              if len(data) < 128:
+                  return False
+              if data[:2] == b"\x30\x82":
+                  expected = 4 + int.from_bytes(data[2:4], "big")
+                  return len(data) == expected
+              return data[:2] == b"\x30\x80" or data[:4] == b"\xfe\xed\xfe\xed"
+
+          def try_decode_b64(text: str):
+              cleaned = re.sub(r"\s+", "", strip_quotes(text))
+              if len(cleaned) < 100:
+                  return None
+              try:
+                  decoded = base64.b64decode(cleaned, validate=True)
+              except Exception:
+                  return None
+              return decoded if looks_like_keystore_bytes(decoded) else None
+
+          def norm_key(k: str) -> str:
+              return re.sub(r"[\s\-]+", "_", k.strip()).upper()
+
+          KEY_PAT = re.compile(
+              r"^(SIGNING[_\s-]?KEYSTORE[_\s-]?B64|KEYSTORE[_\s-]?B64|RELEASE[_\s-]?KEYSTORE|KEYSTORE|BASE64(?:[_\s-]?STRING)?|B64|"
+              r"SIGNING[_\s-]?STORE[_\s-]?PASSWORD|STORE[_\s-]?PASSWORD|PASSWORD|PASS|"
+              r"SIGNING[_\s-]?KEY[_\s-]?PASSWORD|KEY[_\s-]?PASSWORD|"
+              r"SIGNING[_\s-]?KEY[_\s-]?ALIAS|KEY[_\s-]?ALIAS|ALIAS)\s*[:=]\s*(.+)$",
+              re.IGNORECASE,
+          )
+
+          named = {}
+          # Support JSON object format too
+          if raw.strip().startswith("{"):
+              try:
+                  obj = json.loads(raw)
+                  if isinstance(obj, dict):
+                      for k, v in obj.items():
+                          if isinstance(v, str):
+                              named[norm_key(k)] = v.strip()
+              except Exception:
+                  pass
+
+          if not named:
+              for ln in lines:
+                  m = KEY_PAT.match(ln)
+                  if m:
+                      named[norm_key(m.group(1))] = strip_quotes(m.group(2))
+
+          ks_bytes = None
+          candidates = []
+
+          if named:
+              b64_val = (
+                  named.get("SIGNING_KEYSTORE_B64")
+                  or named.get("KEYSTORE_B64")
+                  or named.get("RELEASE_KEYSTORE")
+                  or named.get("KEYSTORE")
+                  or named.get("BASE64")
+                  or named.get("BASE64_STRING")
+                  or named.get("B64")
+              )
+              if b64_val:
+                  ks_bytes = try_decode_b64(b64_val)
+              store_pw = (
+                  named.get("SIGNING_STORE_PASSWORD")
+                  or named.get("STORE_PASSWORD")
+                  or named.get("PASSWORD")
+                  or named.get("PASS")
+              )
+              key_pw = named.get("SIGNING_KEY_PASSWORD") or named.get("KEY_PASSWORD") or store_pw
+              alias = named.get("SIGNING_KEY_ALIAS") or named.get("KEY_ALIAS") or named.get("ALIAS") or "falak"
+              if store_pw:
+                  candidates.append((store_pw, alias, key_pw))
+
+          if ks_bytes is None:
+              # Positional multiline format:
+              #   Line 1 (or wrapped base64 lines): Base64 keystore
+              #   Remaining 2 lines: password, alias (or alias, password)
+              #   Remaining 3 lines: store_password, alias, key_password
+              b64_end = None
+              for idx in range(len(lines) - 1, -1, -1):
+                  joined = "".join(lines[: idx + 1])
+                  dec = try_decode_b64(joined)
+                  if dec is not None:
+                      ks_bytes = dec
+                      b64_end = idx + 1
+                      break
+              if ks_bytes is None:
+                  for idx, ln in enumerate(lines):
+                      dec = try_decode_b64(ln)
+                      if dec is not None:
+                          ks_bytes = dec
+                          rest = [strip_quotes(x) for j, x in enumerate(lines) if j != idx]
+                          if len(rest) == 2:
+                              candidates.append((rest[0], rest[1], rest[0]))
+                              candidates.append((rest[1], rest[0], rest[1]))
+                          elif len(rest) == 3:
+                              candidates.append((rest[0], rest[1], rest[2]))
+                              candidates.append((rest[0], rest[2], rest[1]))
+                          elif len(rest) == 1:
+                              candidates.append((rest[0], "falak", rest[0]))
+                          break
+              else:
+                  rest = [strip_quotes(x) for x in lines[b64_end:]]
+                  if len(rest) == 2:
+                      candidates.append((rest[0], rest[1], rest[0]))
+                      candidates.append((rest[1], rest[0], rest[1]))
+                  elif len(rest) == 3:
+                      candidates.append((rest[0], rest[1], rest[2]))
+                      candidates.append((rest[0], rest[2], rest[1]))
+                  elif len(rest) == 1:
+                      candidates.append((rest[0], "falak", rest[0]))
+
+          if ks_bytes is None:
+              print("::error::Could not locate valid Base64 PKCS12/JKS keystore data inside RELEASE_KEYSTORE.")
+              sys.exit(1)
+
+          out_path.parent.mkdir(parents=True, exist_ok=True)
+          out_path.write_bytes(ks_bytes)
+          os.chmod(out_path, 0o600)
+
+          def verify_keystore(store_pw: str, alias: str):
+              res = subprocess.run(
+                  ["keytool", "-list", "-keystore", str(out_path), "-storepass:env", "KS_PASS", "-alias", alias],
+                  env={**os.environ, "KS_PASS": store_pw},
+                  stdout=subprocess.DEVNULL,
+                  stderr=subprocess.DEVNULL,
+              )
+              if res.returncode == 0:
+                  return alias
+              # Fallback: if password unlocks keystore cleanly, discover the sole PrivateKeyEntry alias
+              res2 = subprocess.run(
+                  ["keytool", "-list", "-keystore", str(out_path), "-storepass:env", "KS_PASS"],
+                  env={**os.environ, "KS_PASS": store_pw},
+                  capture_output=True,
+                  text=True,
+              )
+              if res2.returncode == 0:
+                  for out_ln in res2.stdout.splitlines():
+                      if "PrivateKeyEntry" in out_ln and "," in out_ln:
+                          return out_ln.split(",", 1)[0].strip()
+              return None
+
+          chosen = None
+          for spw, al, kpw in candidates:
+              print(f"::add-mask::{spw}", flush=True)
+              print(f"::add-mask::{kpw}", flush=True)
+              resolved_alias = verify_keystore(spw, al)
+              if resolved_alias:
+                  chosen = (spw, resolved_alias, kpw)
+                  break
+
+          if chosen is None:
+              print("::error::Decoded keystore successfully, but password/alias verification via keytool failed.")
+              sys.exit(1)
+
+          store_pw, alias, key_pw = chosen
+          gh_env = Path(os.environ["GITHUB_ENV"])
+          with gh_env.open("a", encoding="utf-8") as f:
+              for k, v in [
+                  ("SIGNING_KEYSTORE_PATH", str(out_path)),
+                  ("SIGNING_STORE_PASSWORD", store_pw),
+                  ("SIGNING_KEY_ALIAS", alias),
+                  ("SIGNING_KEY_PASSWORD", key_pw),
+              ]:
+                  delim = f"EOF_{secrets.token_hex(8)}"
+                  f.write(f"{k}<<{delim}\n{v}\n{delim}\n")
+
+          print(f"Verified RELEASE_KEYSTORE successfully ({len(ks_bytes)} bytes, alias='{alias}').")
+          PY
+
+      - name: Build release-signed APK
+        working-directory: android
+        run: gradle assembleRelease --no-daemon
+
+      - name: Verify APK signature, alignment & zero permissions
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk falak.apk
+          BUILD_TOOLS="${ANDROID_HOME}/build-tools/35.0.0"
+
+          echo "=== APK Badging ==="
+          "${BUILD_TOOLS}/aapt2" dump badging falak.apk | head -n 6
+
+          echo "=== APK Permissions Check ==="
+          PERMS=$("${BUILD_TOOLS}/aapt2" dump permissions falak.apk | grep "uses-permission" | grep -v "DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" || true)
+          if [ -n "${PERMS}" ]; then
+            echo "::error::Unexpected Android permissions detected: ${PERMS}"
+            exit 1
+          fi
+          echo "Verified: zero Android system/user permissions."
+
+          echo "=== Signing Certificate (Public Fingerprint) ==="
+          CERT_INFO=$("${BUILD_TOOLS}/apksigner" verify --print-certs falak.apk)
+          echo "${CERT_INFO}"
+          if echo "${CERT_INFO}" | grep -q "CN=Android Debug"; then
+            echo "::error::Release APK was signed with Android Debug key instead of RELEASE_KEYSTORE!"
+            exit 1
+          fi
+
+          echo "=== Zipalign Check ==="
+          "${BUILD_TOOLS}/zipalign" -c 4 falak.apk
+          echo "Zipalign OK."
+
+          echo "=== APK Checksum ==="
+          sha256sum falak.apk
+          ls -lh falak.apk
+
+      - name: Clean up temporary keystore
+        if: always()
+        run: rm -f android/app/release.keystore android/keystore.properties
+
+      - name: Upload signed APK workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: falak-release-apk
+          path: falak.apk
+          retention-days: 30
+
+      - name: Attach falak.apk to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
+        run: |
+          if gh release view "${TARGET_TAG}" > /dev/null 2>&1; then
+            gh release upload "${TARGET_TAG}" falak.apk --clobber
+          else
+            gh release create "${TARGET_TAG}" falak.apk \
+              --title "Falak ${TARGET_TAG}" \
+              --generate-notes
+          fi
